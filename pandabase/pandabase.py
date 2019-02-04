@@ -1,5 +1,5 @@
 """
-pandabase is a pandas DataFrame <-> sqlalchemy layer.
+pandabase converts pandas DataFrames to & from SQL databases
 
 It replaces pandas.to_sql and pandas.read_sql, and requires the user
 to select a unique index. This allows upserts and makes it easier to
@@ -14,15 +14,22 @@ pandabase:
 
 by sam beck
 github.com/notsambeck/pandabase
-largely copied from pandas and dataset (todo: add links)
+
+largely copied from pandas:
+https://github.com/pandas-dev/pandas
+and dataset:
+https://github.com/pudo/dataset/
 """
 
 import pandas as pd
-from pandas.api.types import (is_bool_dtype, is_datetime64_any_dtype,
-                              is_integer_dtype, is_float_dtype)
-import sqlalchemy as sa
-from sqlalchemy.exc import IntegrityError
+from pandas.api.types import (is_bool_dtype,
+                              is_datetime64_any_dtype,
+                              is_integer_dtype,
+                              is_float_dtype)
+
+import sqlalchemy as sqa
 from sqlalchemy import Table, Column, Integer, String, Float, DateTime, Boolean
+from sqlalchemy.exc import IntegrityError
 
 import logging
 
@@ -33,7 +40,7 @@ def engine_builder(con):
     else it just return con without modifying it.
     """
     if isinstance(con, str):
-        con = sa.create_engine(con)
+        con = sqa.create_engine(con)
 
     return con
 
@@ -66,7 +73,7 @@ def has_table(con, table_name):
 def to_sql(df: pd.DataFrame, *,
            index_col_name: str,
            table_name: str,
-           con: str or sa.engine,
+           con: str or sqa.engine,
            how='fail'):
     """
     Write records stored in a DataFrame to a SQL database.
@@ -93,7 +100,7 @@ def to_sql(df: pd.DataFrame, *,
     ##########################################
     # 1. make connection objects; check inputs
     engine = engine_builder(con)
-    meta = sa.MetaData()
+    meta = sqa.MetaData()
 
     if how not in ('fail', 'append', 'upsert', ):
         raise ValueError("'{0}' is not valid for if_exists".format(how))
@@ -143,6 +150,7 @@ def to_sql(df: pd.DataFrame, *,
                 with engine.begin() as conn:
                     conn.execute(f'ALTER TABLE {table_name} '
                                  f'ADD COLUMN {new_col.name} {new_col.type.compile(engine.dialect)}')
+            # TODO: new columns are added, but data is not written to them
     # 2b. unless it's a new table
     else:
         logging.info(f'Creating new table {table_name}')
@@ -200,7 +208,7 @@ def _make_clean_columns_dict(df: pd.DataFrame, index_col_name):
 
 
 def read_sql(table_name: str,
-             con: str or sa.engine,
+             con: str or sqa.engine,
              columns=None):
     """
     Convenience wrapper around pd.read_sql_query
@@ -213,7 +221,7 @@ def read_sql(table_name: str,
     :param columns: list (default None => select all columns)
     """
     engine = engine_builder(con)
-    meta = sa.MetaData(bind=engine)
+    meta = sqa.MetaData(bind=engine)
     table = Table(table_name, meta, autoload=True, autoload_with=engine)
 
     # find index column, datatypes
@@ -231,10 +239,10 @@ def read_sql(table_name: str,
         selector = []
         for col in columns:
             selector.append(table.c[col])
-        s = sa.select(selector)
+        s = sqa.select(selector)
 
     else:
-        s = sa.select([table])
+        s = sqa.select([table])
 
     datetime_cols = list([key for key, value in datatypes.items() if is_datetime64_any_dtype(value)])
     df = pd.read_sql_query(s, engine, index_col=index_col,

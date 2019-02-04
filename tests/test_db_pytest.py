@@ -5,6 +5,7 @@ Note that the working directory is project root; when running tests from PyCharm
 the default may be root/tests. Can be set from Run/Debug Configurations:Templates
 """
 import pytest
+
 import pandas as pd
 import pandabase as pb
 from sqlalchemy.exc import IntegrityError
@@ -50,6 +51,7 @@ def test_dir_exists():
     # print(os.listdir())
     assert os.path.exists(FILE1)
     assert os.path.exists(FILE2)
+    assert os.path.exists(FILE3)
 
 
 def test_has_table_false(mem_con):
