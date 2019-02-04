@@ -1,11 +1,9 @@
 """
 Tests for pandabase.
 
-Note that the current directory assumed is project root; if running tests in Pycharm,
-the default may be root/tests. Can be set from Run / Debug Configurations : Templates
+Note that the working directory is project root; when running tests from PyCharm,
+the default may be root/tests. Can be set from Run/Debug Configurations:Templates
 """
-
-
 import pytest
 import pandas as pd
 import pandabase as pb
@@ -17,7 +15,7 @@ TEST_LOG = os.path.join('tests', 'test_log.log')
 # rewrite logfile following each test
 logging.basicConfig(level=logging.DEBUG, filename=TEST_LOG, filemode='w')
 
-# Random-ish .csvs for tests
+# Arbitrary data (partially overlapping columns, disjoint indexes) for tests
 FILE1 = os.path.join('tests', 'sample_data.csv.zip')
 FILE2 = os.path.join('tests', 'sample_data2.csv.zip')
 FILE3 = os.path.join('tests', 'sample_data3.csv')
@@ -25,7 +23,7 @@ FILE3 = os.path.join('tests', 'sample_data3.csv')
 
 @pytest.fixture(scope='session')
 def mem_con():
-    """In-memory database fixture; persistent through session?"""
+    """In-memory database fixture; persistent through session"""
     return pb.engine_builder('sqlite:///:memory:')
 
 
@@ -45,6 +43,9 @@ def sample_dfs():
     return dfs
 
 
+# BASIC TESTS #
+
+
 def test_dir_exists():
     # print(os.listdir())
     assert os.path.exists(FILE1)
@@ -53,6 +54,9 @@ def test_dir_exists():
 
 def test_has_table_false(mem_con):
     assert pb.has_table(mem_con, 'sample') is False
+
+
+# WRITE TO SQL TESTS #
 
 
 def test_create_table(mem_con, sample_dfs):
@@ -123,3 +127,13 @@ def test_upsert_fails_different_index(mem_con, sample_dfs):
                   con=mem_con,
                   how='upsert')
 
+
+# READ FROM SQL TESTS #
+
+
+def test_read_from_full_table(mem_con, sample_dfs):
+    db = pb.read_sql('sample', mem_con)
+    print(db.head())
+    print(db.info())
+    csv = sum([len(df) for df in sample_dfs])
+    assert len(db) == csv

@@ -1,18 +1,20 @@
 """
-pandabase is a tool that replaces pandas.to_sql and pandas.read_sql, allowing for easy
+pandabase is a pandas DataFrame <-> sqlalchemy layer.
 
-specifically:
-* provides an easy way to move data from DataFrames to a sql database and vice versa
-(intended for data science applications where the dataset may expand or be updated over time)
+It replaces pandas.to_sql and pandas.read_sql, and requires the user
+to select a unique index. This allows upserts and makes it easier to
+maintain a dataset that grows over time. Especially time series.
 
-* definitely supports sqlite, although it may work for other dialects as well.
+pandabase:
+    is much simpler than pandas.io.sql
+    is only compatible with newest versions of Pandas & sqlalchemy
+    is not guaranteed
+    definitely supports sqlite, may or may support other backends
+    uses the sqlalchemy core and Pandas; has no additional dependencies
 
-* uses sqlalchemy core to explicitly define primary keys, allowing for:
-1. tables with meaningful indices
-2. upserts
-
-by sam beck, github.com/notsambeck
-largely stolen from pandas and dataset (todo: add links)
+by sam beck
+github.com/notsambeck/pandabase
+largely copied from pandas and dataset (todo: add links)
 """
 
 import pandas as pd
@@ -38,11 +40,9 @@ def engine_builder(con):
 
 def _get_sql_dtype(series):
     """
-    Take a pd.Series (or column of DataFrame), return SQLAlchemy datatype for column
-
-    If it's not anything else, return a string
-
-    :param series:
+    Take a pd.Series or column of DataFrame, return its SQLAlchemy datatype
+    If it doesn't match anything, return String
+    :param series: pd.Series
     :return: one of {Integer, Float, Boolean, DateTime, String}
     """
     if is_bool_dtype(series):
@@ -60,10 +60,7 @@ def _get_sql_dtype(series):
 def has_table(con, table_name):
     """pandas.sql.has_table()"""
     engine = engine_builder(con)
-    return engine.run_callable(
-        engine.dialect.has_table,
-        table_name,
-    )
+    return engine.run_callable(engine.dialect.has_table, table_name)
 
 
 def to_sql(df: pd.DataFrame, *,
@@ -93,7 +90,7 @@ def to_sql(df: pd.DataFrame, *,
     index_col_name : name of column to use as index, or None to use range_index
         (Applies to both DataFrame and sql database)
     """
-    ############################################
+    ##########################################
     # 1. make connection objects; check inputs
     engine = engine_builder(con)
     meta = sa.MetaData()
@@ -110,9 +107,9 @@ def to_sql(df: pd.DataFrame, *,
     df.index = df[index_col_name]   # this raises if invalid
     if not df.index.is_unique:
         raise ValueError('DataFrame index must be unique; otherwise use index=None to add integer PK')
-    # we will check that index_col_name is in db.table later (after we have reflected db)
+        # we will check that index_col_name is in db.table later (after we have reflected db)
 
-    ############################################
+    ############################################################################
     # 2a. get existing table metadata from db, add any new columns from df to db
     if has_table(engine, table_name):
         if how == 'fail':
@@ -151,8 +148,8 @@ def to_sql(df: pd.DataFrame, *,
         logging.info(f'Creating new table {table_name}')
         table = Table(table_name, meta, *df_columns.values())
 
-    ###########################################################
-    # 3. create any new tables
+    #####################################
+    # 3. create any new tables or columns
     with engine.begin() as con:
         meta.create_all(bind=con)
 
@@ -200,3 +197,47 @@ def _make_clean_columns_dict(df: pd.DataFrame, index_col_name):
 
     assert len(columns) > 1
     return columns
+
+
+def read_sql(table_name: str,
+             con: str or sa.engine,
+             columns=None):
+    """
+    Convenience wrapper around pd.read_sql_query
+
+    Reflect metadata; get Table or Table[columns]
+
+    TODO: add range limit parameters
+    :param table_name: str
+    :param con: db connectable
+    :param columns: list (default None => select all columns)
+    """
+    engine = engine_builder(con)
+    meta = sa.MetaData(bind=engine)
+    table = Table(table_name, meta, autoload=True, autoload_with=engine)
+
+    # find index column, datatypes
+    index_col = None
+    datatypes = {}
+    for col in table.columns:
+        datatypes[col.name] = col.type.python_type
+        if col.primary_key:
+            index_col = col.name
+
+    # make selector
+    if columns is not None:
+        if index_col not in columns:
+            raise NameError(f'User supplied columns do not include index col: {index_col}')
+        selector = []
+        for col in columns:
+            selector.append(table.c[col])
+        s = sa.select(selector)
+
+    else:
+        s = sa.select([table])
+
+    datetime_cols = list([key for key, value in datatypes.items() if is_datetime64_any_dtype(value)])
+    df = pd.read_sql_query(s, engine, index_col=index_col,
+                           parse_dates=datetime_cols, )
+
+    return df
