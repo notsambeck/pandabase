@@ -1,0 +1,11 @@
+#pycharm
+.idea
+
+#python
+*.pyc
+*.whl
+*.egg-info
+
+#jupiter
+*checkpoint.ipynb
+
