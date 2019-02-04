@@ -19,10 +19,10 @@ import pandas as pd
 from pandas.api.types import (is_bool_dtype, is_datetime64_any_dtype,
                               is_integer_dtype, is_float_dtype)
 import sqlalchemy as sa
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy import Table, Column, Integer, String, Float, DateTime, Boolean
 
 import logging
-logging.basicConfig(level=logging.DEBUG)
 
 
 def engine_builder(con):
@@ -66,10 +66,10 @@ def has_table(con, table_name):
     )
 
 
-def to_sql(df: pd.DataFrame,
+def to_sql(df: pd.DataFrame, *,
            index_col_name: str,
            table_name: str,
-           con,
+           con: str or sa.engine,
            how='fail'):
     """
     Write records stored in a DataFrame to a SQL database.
@@ -80,15 +80,23 @@ def to_sql(df: pd.DataFrame,
     table_name : string
         Name of SQL table.
     con : connection; database string URI < OR > sa.engine
-    how : {'fail', 'replace', 'append'}, default 'fail'
-        - fail: If table exists, do nothing.
-        - append: If table exists, insert data. Create if does not exist.
-        - upsert: Table must exist; if record exists ... TODO
+    how : {'fail', 'upsert', 'append'}, default 'fail'
+        - fail:
+            If table exists, raise an error and stop.
+        - append:
+            If table exists, append data. Raise if index overlaps
+            Create table if does not exist.
+        - upsert:
+            create table if needed
+            if record exists: update
+            else: insert
     index_col_name : name of column to use as index, or None to use range_index
         (Applies to both DataFrame and sql database)
     """
     ############################################
-    # 0. check inputs; make db connection engine
+    # 1. make connection objects; check inputs
+    engine = engine_builder(con)
+    meta = sa.MetaData()
 
     if how not in ('fail', 'append', 'upsert', ):
         raise ValueError("'{0}' is not valid for if_exists".format(how))
@@ -97,81 +105,86 @@ def to_sql(df: pd.DataFrame,
         raise ValueError('to_sql() requires a DataFrame as input')
 
     index_col_name = clean_name(index_col_name)
+    df_columns = _make_clean_columns_dict(df, index_col_name)
 
-    engine = engine_builder(con)
-    meta = sa.MetaData()
-
-    ####################################
-    # 1. make a dict of {name: Column} from df columns
-    df_columns = _make_columns_dict(df, index_col_name)
+    df.index = df[index_col_name]   # this raises if invalid
+    if not df.index.is_unique:
+        raise ValueError('DataFrame index must be unique; otherwise use index=None to add integer PK')
+    # we will check that index_col_name is in db.table later (after we have reflected db)
 
     ############################################
-    # 2. get existing table metadata from db, add any new columns from df to db
-
+    # 2a. get existing table metadata from db, add any new columns from df to db
     if has_table(engine, table_name):
         if how == 'fail':
             raise NameError(f'Table {table_name} already exists; if_exists set to fail.')
 
         table = Table(table_name, meta, autoload=True, autoload_with=engine)
+        if index_col_name not in [col.name for col in table.columns]:
+            raise ValueError('index_col_name is not in existing database table')
 
+        new_cols = []
         for name in df_columns.keys():
             # check dtypes and PKs match
             if name in table.columns:
                 if table.columns[name].primary_key != df_columns[name].primary_key:
                     raise ValueError(f'Inconsistent pk for {name}! db: {table.columns[name].primary_key} / '
                                      f'df: {df_columns[name].primary_key}')
-                if table.columns[name].type != df_columns[name].type:
+                # column.type is not directly comparable, use str(type) or type.python_type?
+                if table.columns[name].type.python_type != df_columns[name].type.python_type:
                     raise ValueError(f'Inconsistent type for {name}! db: {table.columns[name].type} / '
                                      f'df: {df_columns[name].type}')
             # add new columns if needed (sqla does not support migrations directly)
             else:
-                # TODO: confirm sqla automatically adds NaN here
-                logging.warning(f'Table {table_name} / column {name}:'
-                                f' new Series added at index {df[index_col_name]}')
-                new_col = Column(name, _get_sql_dtype(df[name]))
-                with engine.begin as conn:
-                    conn.execute(f'ALTER TABLE {table_name} '
-                                 f'ADD COLUMN {name} {new_col.type.compile(engine.dialect)}')
+                new_cols.append(Column(name, _get_sql_dtype(df[name])))
 
-    # unless it's a new table
+        if len(new_cols):
+            col_names_string = ", ".join([col.name for col in new_cols])
+            # TODO: confirm sqla automatically adds NaN here
+            logging.warning(f' Table[{table_name}]:'
+                            f' new Series [{col_names_string}] added around index {df[index_col_name][0]}')
+            for new_col in new_cols:
+                with engine.begin() as conn:
+                    conn.execute(f'ALTER TABLE {table_name} '
+                                 f'ADD COLUMN {new_col.name} {new_col.type.compile(engine.dialect)}')
+    # 2b. unless it's a new table
     else:
-        logging.info(f'Creating table {table_name}')
+        logging.info(f'Creating new table {table_name}')
         table = Table(table_name, meta, *df_columns.values())
 
     ###########################################################
-    # 3. create tables
-    with engine.begin() as conn:
-        meta.create_all(bind=conn)
+    # 3. create any new tables
+    with engine.begin() as con:
+        meta.create_all(bind=con)
 
     ######################################################
-    # FINALLY: either insert or upsert
-    df.index = df[index_col_name]
-    assert df.index.is_unique
-
-    with engine.begin() as conn:
-        logging.info('starting write')
-        if how in ['append', 'fail']:
-            # raise if repeated index
-            conn.execute(table.insert(), [row.to_dict() for i, row in df.iterrows()])
-            return
-        if how == 'upsert':
-            # explicitly handle index uniqueness
-            for i in df.index:
-                try:
+    # FINALLY: either insert/fail, append/fail, or upsert
+    if how in ['append', 'fail']:
+        # raise if repeated index
+        with engine.begin() as con:
+            con.execute(table.insert(), [row.to_dict() for i, row in df.iterrows()])
+    elif how == 'upsert':
+        # explicitly handle index uniqueness
+        for i in df.index:
+            try:
+                with engine.begin() as con:
                     upsert = table.insert().values(df.loc[i].to_dict())
-                    conn.execute(upsert)
-                except sa.exc.UniqueConstraintError:   # TODO fake name?
+                    con.execute(upsert)
+            except IntegrityError:
+                with engine.begin() as con:
+
                     upsert = table.update()\
-                            .where(table.c.index_col_name == i)\
+                            .where(table.c[index_col_name] == i)\
                             .values(df.loc[i].to_dict())
-                    conn.execute(upsert)
+                    con.execute(upsert)
+
+    return table
 
 
 def clean_name(name):
     return name.lower().strip().replace(' ', '_')
 
 
-def _make_columns_dict(df: pd.DataFrame, index_col_name):
+def _make_clean_columns_dict(df: pd.DataFrame, index_col_name):
     """Take a DataFrame and index_col_name (or None), return a dictionary {table_name: new Table}"""
     columns = {}
     df.columns = [clean_name(col) for col in df.columns]
@@ -183,26 +196,7 @@ def _make_columns_dict(df: pd.DataFrame, index_col_name):
 
     for col_name in df.columns:
         pk = index_col_name == col_name
-        columns[col_name] = Column(col_name, _get_sql_dtype(sample_data[col_name]), primary_key=pk, )
+        columns[col_name] = Column(col_name, _get_sql_dtype(df[col_name]), primary_key=pk, )
 
     assert len(columns) > 1
     return columns
-
-
-if __name__ == '__main__':
-    db = 'sqlite:///test_data/test.db'
-    print('users table exists:', has_table(db, 'users'))
-
-    # load sample data and parse date columns
-    for file in ['./test_data/sample_data.csv.zip', './test_data/sample_data2.csv.zip']:
-        sample_data = pd.read_csv(file)
-        sample_data.columns = [clean_name(col) for col in sample_data.columns]
-        sample_data = sample_data[sample_data.lmp_type == 'LMP']
-        for df_col in sample_data.columns:
-            if 'time' in df_col.lower():
-                sample_data[df_col] = pd.to_datetime(sample_data[df_col])
-
-        to_sql(sample_data, 'INTERVALSTARTTIME_GMT', 'users', db, 'append')
-
-        print(sample_data.columns)
-        print(sample_data['lmp_type'].unique())

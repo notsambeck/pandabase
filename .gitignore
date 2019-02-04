@@ -1,6 +1,9 @@
 #pycharm
 .idea
 
+#log files
+tests/test_log.log
+
 #python
 *.pyc
 *.whl
