@@ -6,11 +6,18 @@ the default may be root/tests. Can be set from Run/Debug Configurations:Template
 """
 import pytest
 
-import pandas as pd
 import pandabase as pb
-from sqlalchemy.exc import IntegrityError
-import os
 
+import pandas as pd
+from pandas.api.types import (is_bool_dtype,
+                              is_datetime64_any_dtype,
+                              is_integer_dtype,
+                              is_float_dtype)
+
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy import Table, Column, Integer, String, Float, DateTime, Boolean
+
+import os
 import logging
 TEST_LOG = os.path.join('tests', 'test_log.log')
 # rewrite logfile following each test
@@ -23,13 +30,13 @@ FILE3 = os.path.join('tests', 'sample_data3.csv')
 
 
 @pytest.fixture(scope='session')
-def mem_con():
+def session_db():
     """In-memory database fixture; persistent through session"""
     return pb.engine_builder('sqlite:///:memory:')
 
 
 @pytest.fixture(scope='session')
-def sample_dfs():
+def sample_csv_dfs():
     dfs = []
     for file in [FILE1, FILE2, FILE3]:
         sample_data = pd.read_csv(file)
@@ -44,98 +51,119 @@ def sample_dfs():
     return dfs
 
 
+@pytest.fixture(scope='session')
+def basic_df():
+    """make a dumb DataFrame with sample data of 4 classes and integer index"""
+
+    cols = 5
+    rows = 10
+    df = pd.DataFrame(columns=['date', 'integer', 'float', 'string', 'boolean'],
+                      index=range(rows),)
+    df.date = pd.date_range(pd.to_datetime('2001-01-01 12:00am', utc=True), periods=10, freq='d')
+    df.integer = range(10)
+    df.float = [float(i) / 10 for i in range(10)]
+    df.string = list('panda_base')
+    df.boolean = [True, False] * 5
+    return df
+
+
 # BASIC TESTS #
 
 
-def test_dir_exists():
-    # print(os.listdir())
-    assert os.path.exists(FILE1)
-    assert os.path.exists(FILE2)
-    assert os.path.exists(FILE3)
+def test_basic_df(basic_df):
+    """test that datatype functions work as expected"""
+    df = basic_df
+    assert type(basic_df.index) is pd.RangeIndex
 
+    assert is_datetime64_any_dtype(df.date)
+    assert pb.get_sql_dtype(df.date) == DateTime
 
-def test_has_table_false(mem_con):
-    assert pb.has_table(mem_con, 'sample') is False
+    assert is_integer_dtype(df.integer)
+    assert not is_float_dtype(df.integer)
+    assert pb.get_sql_dtype(df.integer) == Integer
+
+    assert is_float_dtype(df.float)
+    assert not is_integer_dtype(df.float)
+    assert pb.get_sql_dtype(df.float) == Float
+
+    assert not is_integer_dtype(df.string) and not is_float_dtype(df.string) and \
+        not is_datetime64_any_dtype(df.string) and not is_bool_dtype(df.string)
+    assert pb.get_sql_dtype(df.string) == String
+
+    assert is_bool_dtype(df.boolean)
+    assert pb.get_sql_dtype(df.boolean) == Boolean
 
 
 # WRITE TO SQL TESTS #
 
 
-def test_create_table(mem_con, sample_dfs):
-    pk = 'intervalstarttime_gmt'
-    table = pb.to_sql(sample_dfs[0],
-                      index_col_name=pk,
+def test_create_table(session_db, basic_df):
+    assert not pb.has_table(session_db, 'sample')
+
+    table = pb.to_sql(basic_df,
+                      index_col_name=None,
                       table_name='sample',
-                      con=mem_con,
+                      con=session_db,
                       how='fail')
-    print(table.columns[pk].primary_key)
-    assert table.columns[pk].primary_key
-    assert pb.has_table(mem_con, 'sample') is True
+    assert table.columns['pandabase_index'].primary_key
+    assert pb.has_table(session_db, 'sample')
+
+    loaded = pb.read_sql('sample', con=session_db)
+    assert pb.companda(loaded, basic_df)
+    assert pb.has_table(session_db, 'sample')
 
 
-def test_create_table_again_fail(mem_con, sample_dfs):
-    pk = 'intervalstarttime_gmt'
+def test_overwrite_table_fails(session_db, basic_df):
+    assert pb.has_table(session_db, 'sample')
+
     with pytest.raises(NameError):
-        pb.to_sql(sample_dfs[0],
-                  index_col_name=pk,
+        pb.to_sql(basic_df,
+                  index_col_name=None,
                   table_name='sample',
-                  con=mem_con,
+                  con=session_db,
                   how='fail')
 
 
-def test_append_fails(mem_con, sample_dfs):
-    # can't append if indexes overlap
-    pk = 'intervalstarttime_gmt'
-    with pytest.raises(IntegrityError):
-        pb.to_sql(sample_dfs[0],
-                  index_col_name=pk,
-                  table_name='sample',
-                  con=mem_con,
-                  how='append')
+@pytest.mark.parametrize('table_name, col_name', [['s1', 'integer'],
+                                                  ['s2', 'float'],
+                                                  ['s3', 'date'], ])
+def test_create_table_with_index(session_db, basic_df, table_name, col_name):
+    table = pb.to_sql(basic_df,
+                      index_col_name=col_name,
+                      table_name=table_name,
+                      con=session_db,
+                      how='fail')
+    assert table.columns[col_name].primary_key
+
+    assert pb.has_table(session_db, table_name)
+    loaded = pb.read_sql(table_name, con=session_db)
+    c = pb.companda(loaded, basic_df)
+    if not c:
+        raise ValueError(c.msg)
 
 
-def test_upsert(mem_con, sample_dfs):
-    pk = 'intervalstarttime_gmt'
-    pb.to_sql(sample_dfs[0],
-              index_col_name=pk,
-              table_name='sample',
-              con=mem_con,
-              how='upsert')
-
-
-def test_append_new_index(mem_con, sample_dfs):
-    pk = 'intervalstarttime_gmt'
-    pb.to_sql(sample_dfs[1],
-              index_col_name=pk,
-              table_name='sample',
-              con=mem_con,
-              how='append')
-
-
-def test_append_new_cols_new_index(mem_con, sample_dfs):
-    pk = 'intervalstarttime_gmt'
-    pb.to_sql(sample_dfs[2],
-              index_col_name=pk,
-              table_name='sample',
-              con=mem_con,
-              how='append')
-
-
-def test_upsert_fails_different_index(mem_con, sample_dfs):
-    with pytest.raises(ValueError):
-        pb.to_sql(sample_dfs[0],
-                  index_col_name='INTERVALENDTIME_GMT',
-                  table_name='sample',
-                  con=mem_con,
+def test_upsert_fails_no_index(session_db, basic_df):
+    table_name = 'sample'
+    with pytest.raises(IOError):
+        pb.to_sql(basic_df,
+                  index_col_name=None,
+                  table_name=table_name,
+                  con=session_db,
                   how='upsert')
 
 
-# READ FROM SQL TESTS #
+def test_upsert(session_db):
+    table_name = 's1'
+    assert pb.has_table(session_db, table_name)
+    df = pb.read_sql(table_name, con=session_db)
 
+    df.loc[1, 'float'] = 999
 
-def test_read_from_full_table(mem_con, sample_dfs):
-    db = pb.read_sql('sample', mem_con)
-    print(db.head())
-    print(db.info())
-    csv = sum([len(df) for df in sample_dfs])
-    assert len(db) == csv
+    pb.to_sql(df,
+              index_col_name='integer',
+              table_name=table_name,
+              con=session_db,
+              how='upsert')
+
+    loaded = pb.read_sql(table_name, con=session_db)
+    assert loaded.loc[1, 'float'] == 999
