@@ -153,6 +153,7 @@ def test_upsert_fails_no_index(session_db, basic_df):
 
 
 def test_upsert(session_db):
+    """TODO - this still fails for upserting incomplete records"""
     table_name = 's1'
     assert pb.has_table(session_db, table_name)
     df = pb.read_sql(table_name, con=session_db)

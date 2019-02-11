@@ -213,12 +213,14 @@ def to_sql(df: pd.DataFrame, *,
             except IntegrityError:
                 print('sqla Integrity Error!')
             except:
+                if strict:
+                    raise IOError('?????????? unknown')
                 print('Unknown error!')
 
             with engine.begin() as con:
                 upsert = table.update() \
                     .where(table.c[index_col_name] == i) \
-                    .values(df.loc[i].to_dict())
+                    .values(df[[col for col in df.columns if col != index_col_name]].loc[i].to_dict())
                 con.execute(upsert)
 
     return table
@@ -284,7 +286,7 @@ def read_sql(table_name: str,
         s = sqa.select([table])
 
     datetime_cols = list([key for key, value in dtypes.items() if value == pd.datetime])
-    print(datetime_cols)
+
     df = pd.read_sql_query(s, engine, index_col=index_col,
                            parse_dates={col: {'utc': True} for col in datetime_cols})
     if index_col != PANDABASE_DEFAULT_INDEX_NAME:
