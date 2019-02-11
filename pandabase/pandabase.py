@@ -55,9 +55,11 @@ def get_sql_dtype(series):
     Take a pd.Series or column of DataFrame, return its SQLAlchemy datatype
     If it doesn't match anything, return String
     :param series: pd.Series
-    :return: one of {Integer, Float, Boolean, DateTime, String}
+    :return: one of {Integer, Float, Boolean, DateTime, String} or None for all NA
     """
-    if is_bool_dtype(series):
+    if series.isna().all():
+        return None
+    elif is_bool_dtype(series):
         return Boolean
     elif is_integer_dtype(series):
         return Integer
@@ -137,7 +139,7 @@ def to_sql(df: pd.DataFrame, *,
 
     df.index = df[index_col_name]  # this raises if invalid
     if not df.index.is_unique:
-        raise ValueError('DataFrame index must be unique; otherwise use index=None to add integer PK')
+        raise ValueError('Specified DataFrame index is not unique; maybe use index=None to add integer as PK')
         # we will check that index_col_name is in db.table later (after we have reflected db)
 
     ############################################################################
@@ -242,6 +244,12 @@ def _make_clean_columns_dict(df: pd.DataFrame, index_col_name):
 
     for col_name in df.columns:
         pk = index_col_name == col_name
+
+        dtype = get_sql_dtype(df[col_name])
+        if dtype is None:
+            # TODO: This fails for all NaN values when inserted later!
+            pass
+
         columns[col_name] = Column(col_name, get_sql_dtype(df[col_name]), primary_key=pk, )
 
     assert len(columns) > 1

@@ -53,9 +53,7 @@ def sample_csv_dfs():
 
 @pytest.fixture(scope='session')
 def basic_df():
-    """make a dumb DataFrame with sample data of 4 classes and integer index"""
-
-    cols = 5
+    """make a dumb DataFrame with multiple dtypes and integer index"""
     rows = 10
     df = pd.DataFrame(columns=['date', 'integer', 'float', 'string', 'boolean'],
                       index=range(rows),)
@@ -159,6 +157,7 @@ def test_upsert(session_db):
     df = pb.read_sql(table_name, con=session_db)
 
     df.loc[1, 'float'] = 999
+    df.loc[111, 'float'] = 9999
 
     pb.to_sql(df,
               index_col_name='integer',
@@ -168,3 +167,4 @@ def test_upsert(session_db):
 
     loaded = pb.read_sql(table_name, con=session_db)
     assert loaded.loc[1, 'float'] == 999
+    assert loaded.loc[111, 'float'] == 9999
