@@ -7,3 +7,7 @@ pandabase converts pandas DataFrames to &amp; from SQL databases
 * is much simpler than pandas sql module (but is not guaranteed to work with all database backends)
 
 designed specifically for time series datasets that need to be updated frequently and stored to disk, but are accessed for computations in-memory.
+
+### Design Considerations
+* Minimal dependencies: SQLAlchemy and Pandas only
+* 

@@ -1,8 +1,10 @@
 import pandas as pd
+import numpy as np
 from pandas.api.types import (is_bool_dtype,
                               is_datetime64_any_dtype,
                               is_integer_dtype,
-                              is_float_dtype)
+                              is_float_dtype,
+                              is_string_dtype)
 
 import sqlalchemy as sqa
 from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean
@@ -22,7 +24,7 @@ def engine_builder(con):
     return con
 
 
-def get_df_sql_dtype(series):
+def get_df_sql_dtype(s):
     """
     Take a pd.Series or column of DataFrame, return its SQLAlchemy datatype
     If it doesn't match anything, return String
@@ -32,23 +34,24 @@ def get_df_sql_dtype(series):
         sqlalchemy Type or None
         one of {Integer, Float, Boolean, DateTime, String, or None (for all NaN)}
     """
-    if series.isna().all():
+    if s.isna().all():
         return None
-    elif is_bool_dtype(series):
+
+    if is_bool_dtype(s):
         return Boolean
-    elif is_integer_dtype(series):
+    elif is_integer_dtype(s):
         return Integer
-    elif is_float_dtype(series):
+    elif is_float_dtype(s):
         return Float
-    elif is_datetime64_any_dtype(series):
+    elif is_datetime64_any_dtype(s):
         return DateTime
     else:
         return String
 
 
-def get_col_sql_dtype(column):
+def get_db_col_dtype(column, pd_or_sqla='pd'):
     """
-    Take a sqlalchemy table.Column, return its SQLAlchemy datatype
+    Take a sqlalchemy table.Column, return its pandas datatype
     If it doesn't match anything, return String
     Args:
         pd.Series
@@ -56,16 +59,30 @@ def get_col_sql_dtype(column):
         sqlalchemy Type or None
         one of {Integer, Float, Boolean, DateTime, String, or None (for all NaN)}
     """
-    if isinstance(column.type, sqa.types.Integer):
-        return Integer
-    elif isinstance(column.type, sqa.types.Float):
-        return Float
-    elif isinstance(column.type, sqa.types.DateTime):
-        return DateTime
-    elif isinstance(column.type, sqa.types.Boolean):
-        return Boolean
+    def _get_sqla_type(col):
+        if isinstance(col.type, sqa.types.Integer):
+            return Integer
+        elif isinstance(col.type, sqa.types.Float):
+            return Float
+        elif isinstance(col.type, sqa.types.DateTime):
+            return DateTime
+        elif isinstance(col.type, sqa.types.Boolean):
+            return Boolean
+        else:
+            return String
+
+    t = _get_sqla_type(column)
+    if pd_or_sqla == 'sqla':
+        return t
+    elif pd_or_sqla == 'pd':
+        lookup = {Integer: np.int64,
+                  Float: np.float64,
+                  DateTime: pd.datetime,
+                  Boolean: np.bool_,
+                  String: np.str_}
+        return lookup[t]
     else:
-        return String
+        raise ValueError(f'Select pd_or_sqla: param = "pd" or "sqla"')
 
 
 def has_table(con, table_name):
