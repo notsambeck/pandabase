@@ -78,15 +78,13 @@ def clean_name(name):
     return name.lower().strip().replace(' ', '_')
 
 
-def make_clean_columns_dict(df: pd.DataFrame, index_col_name):
+def make_clean_columns_dict(df: pd.DataFrame):
     """Take a DataFrame and index_col_name, return a dictionary {name: {Column info}}"""
     columns = {}
     df.columns = [clean_name(col) for col in df.columns]
-
-    assert index_col_name in df.columns
+    index = clean_name(df.index.name)
 
     for col_name in df.columns:
-        pk = index_col_name == col_name
 
         dtype = get_df_sql_dtype(df[col_name])
         if dtype is None:
@@ -94,10 +92,14 @@ def make_clean_columns_dict(df: pd.DataFrame, index_col_name):
 
         columns[col_name] = {
             'dtype': dtype,
-            'pk': pk,
+            'pk': False,
         }
 
     assert len(columns) > 1
+
+    columns[index] = {'dtype': get_df_sql_dtype(df.index),
+                      'pk': True}
+
     return columns
 
 

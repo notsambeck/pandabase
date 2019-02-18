@@ -65,7 +65,7 @@ def basic_df():
     df = pd.DataFrame(columns=['date', 'integer', 'float', 'string', 'boolean', 'nan'],
                       index=range(rows),)
     df.date = pd.date_range(pd.to_datetime('2001-01-01 12:00am', utc=True), periods=10, freq='d')
-    df.integer = range(10)
+    df.integer = range(7, 17)
     df.float = [float(i) / 10 for i in range(10)]
     df.string = list('panda_base')
     df.boolean = [True, False] * 5
@@ -106,7 +106,7 @@ def test_get_sql_dtype_db(basic_df, empty_db):
     """test that datatype functions work as expected"""
     df = basic_df
     table = pb.to_sql(basic_df,
-                      index_col_name=None,
+                      use_index=False,
                       table_name='sample',
                       con=empty_db,
                       how='fail')
@@ -123,7 +123,7 @@ def test_create_table(session_db, basic_df):
     assert not pb.has_table(session_db, 'sample')
 
     table = pb.to_sql(basic_df,
-                      index_col_name=None,
+                      use_index=False,
                       table_name='sample',
                       con=session_db,
                       how='fail')
@@ -131,6 +131,7 @@ def test_create_table(session_db, basic_df):
     assert pb.has_table(session_db, 'sample')
 
     loaded = pb.read_sql('sample', con=session_db)
+    # print(loaded)
     assert pb.companda(loaded, basic_df, ignore_nan=True)
     assert pb.has_table(session_db, 'sample')
 
@@ -140,7 +141,7 @@ def test_overwrite_table_fails(session_db, basic_df):
 
     with pytest.raises(NameError):
         pb.to_sql(basic_df,
-                  index_col_name=None,
+                  use_index=False,
                   table_name='sample',
                   con=session_db,
                   how='fail')
@@ -150,14 +151,17 @@ def test_overwrite_table_fails(session_db, basic_df):
                                                   ['s2', 'float'],
                                                   ['s3', 'date'], ])
 def test_create_table_with_index(session_db, basic_df, table_name, col_name):
+    basic_df.index = basic_df[col_name]
+    basic_df.drop(col_name, axis=1, inplace=True)
     table = pb.to_sql(basic_df,
-                      index_col_name=col_name,
+                      use_index=True,
                       table_name=table_name,
                       con=session_db,
                       how='fail')
-    assert table.columns[col_name].primary_key
 
+    assert table.columns[col_name].primary_key
     assert pb.has_table(session_db, table_name)
+
     loaded = pb.read_sql(table_name, con=session_db)
     c = pb.companda(loaded, basic_df, ignore_nan=True)
     if not c:
@@ -168,7 +172,7 @@ def test_upsert_fails_no_index(session_db, basic_df):
     table_name = 'sample'
     with pytest.raises(IOError):
         pb.to_sql(basic_df,
-                  index_col_name=None,
+                  use_index=False,
                   table_name=table_name,
                   con=session_db,
                   how='upsert')
@@ -185,7 +189,7 @@ def test_upsert(session_db):
     df.loc[111, 'float'] = 9999
 
     pb.to_sql(df,
-              index_col_name='integer',
+              use_index=True,
               table_name=table_name,
               con=session_db,
               how='upsert')

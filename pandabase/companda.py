@@ -3,7 +3,7 @@
 import pandas as pd
 from pandas.api.types import (is_integer_dtype,
                               is_float_dtype)
-from .helpers import get_df_sql_dtype
+from .helpers import get_df_sql_dtype, PANDABASE_DEFAULT_INDEX
 
 
 class CompandaNotEqualError(Exception):
@@ -67,17 +67,26 @@ def companda(df1: pd.DataFrame, df2: pd.DataFrame, gamma=.0001, ignore_nan=False
             msg = f'{col} from df2 not in df1'
             return Companda(False, msg)
 
-    # ROWS
+    # INDEX
     df1 = df1.sort_index()
     df2 = df2.sort_index()
 
     if len(df1) != len(df2):
         return Companda(False, f'len(df1) = {len(df1)}, len(df2) = {len(df2)}')
 
-    index_unequal = pd.Series(df1.index != df2.index)
-    if index_unequal.sum():
-        return Companda(False,
-                        f'Equal length indices, but {index_unequal.sum()}/{len(index_unequal)} values are different.')
+    if df1.index.name == PANDABASE_DEFAULT_INDEX or df2.index.name == PANDABASE_DEFAULT_INDEX:
+        pass
+    else:
+        if df1.index.name != df2.index.name:
+            return Companda(False,
+                            f'Different index names: {df1.index.name}, {df2.index.name}')
+
+        index_unequal = pd.Series(df1.index != df2.index)
+        if index_unequal.sum():
+
+            return Companda(False,
+                            f'Equal length indices, but {index_unequal.sum()}/{len(index_unequal)} '
+                            f'index values are different.')
 
     # VALUES
     for col in df1.columns:
