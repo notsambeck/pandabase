@@ -7,6 +7,7 @@ the default may be root/tests. Can be set from Run/Debug Configurations:Template
 import pytest
 
 import pandabase as pb
+from pandabase.helpers import *
 
 import pandas as pd
 from pandas.api.types import (is_bool_dtype,
@@ -27,6 +28,12 @@ logging.basicConfig(level=logging.DEBUG, filename=TEST_LOG, filemode='w')
 FILE1 = os.path.join('tests', 'sample_data.csv.zip')
 FILE2 = os.path.join('tests', 'sample_data2.csv.zip')
 FILE3 = os.path.join('tests', 'sample_data3.csv')
+
+
+@pytest.fixture(scope='function')
+def empty_db():
+    """In-memory database fixture; not persistent"""
+    return pb.engine_builder('sqlite:///:memory:')
 
 
 @pytest.fixture(scope='session')
@@ -55,41 +62,58 @@ def sample_csv_dfs():
 def basic_df():
     """make a dumb DataFrame with multiple dtypes and integer index"""
     rows = 10
-    df = pd.DataFrame(columns=['date', 'integer', 'float', 'string', 'boolean'],
+    df = pd.DataFrame(columns=['date', 'integer', 'float', 'string', 'boolean', 'nan'],
                       index=range(rows),)
     df.date = pd.date_range(pd.to_datetime('2001-01-01 12:00am', utc=True), periods=10, freq='d')
     df.integer = range(10)
     df.float = [float(i) / 10 for i in range(10)]
     df.string = list('panda_base')
     df.boolean = [True, False] * 5
+    df.nan = [None] * 10
     return df
 
 
 # BASIC TESTS #
 
 
-def test_basic_df(basic_df):
+def test_get_sql_dtype_df(basic_df):
     """test that datatype functions work as expected"""
     df = basic_df
     assert type(basic_df.index) is pd.RangeIndex
 
     assert is_datetime64_any_dtype(df.date)
-    assert pb.get_sql_dtype(df.date) == DateTime
+    assert get_df_sql_dtype(df.date) == DateTime
 
     assert is_integer_dtype(df.integer)
     assert not is_float_dtype(df.integer)
-    assert pb.get_sql_dtype(df.integer) == Integer
+    assert get_df_sql_dtype(df.integer) == Integer
 
     assert is_float_dtype(df.float)
     assert not is_integer_dtype(df.float)
-    assert pb.get_sql_dtype(df.float) == Float
+    assert get_df_sql_dtype(df.float) == Float
 
     assert not is_integer_dtype(df.string) and not is_float_dtype(df.string) and \
         not is_datetime64_any_dtype(df.string) and not is_bool_dtype(df.string)
-    assert pb.get_sql_dtype(df.string) == String
+    assert get_df_sql_dtype(df.string) == String
 
     assert is_bool_dtype(df.boolean)
-    assert pb.get_sql_dtype(df.boolean) == Boolean
+    assert get_df_sql_dtype(df.boolean) == Boolean
+
+    assert get_df_sql_dtype(df.nan) is None
+
+
+def test_get_sql_dtype_db(basic_df, empty_db):
+    """test that datatype functions work as expected"""
+    df = basic_df
+    table = pb.to_sql(basic_df,
+                      index_col_name=None,
+                      table_name='sample',
+                      con=empty_db,
+                      how='fail')
+    for col in table.columns:
+        if col.name == PANDABASE_DEFAULT_INDEX:
+            continue
+        assert get_col_sql_dtype(col) == get_df_sql_dtype(df[col.name])
 
 
 # WRITE TO SQL TESTS #
@@ -107,7 +131,7 @@ def test_create_table(session_db, basic_df):
     assert pb.has_table(session_db, 'sample')
 
     loaded = pb.read_sql('sample', con=session_db)
-    assert pb.companda(loaded, basic_df)
+    assert pb.companda(loaded, basic_df, ignore_nan=True)
     assert pb.has_table(session_db, 'sample')
 
 
@@ -135,7 +159,7 @@ def test_create_table_with_index(session_db, basic_df, table_name, col_name):
 
     assert pb.has_table(session_db, table_name)
     loaded = pb.read_sql(table_name, con=session_db)
-    c = pb.companda(loaded, basic_df)
+    c = pb.companda(loaded, basic_df, ignore_nan=True)
     if not c:
         raise ValueError(c.msg)
 
@@ -151,10 +175,11 @@ def test_upsert_fails_no_index(session_db, basic_df):
 
 
 def test_upsert(session_db):
-    """TODO - this still fails for upserting incomplete records"""
     table_name = 's1'
     assert pb.has_table(session_db, table_name)
     df = pb.read_sql(table_name, con=session_db)
+
+    print(df)
 
     df.loc[1, 'float'] = 999
     df.loc[111, 'float'] = 9999
@@ -166,5 +191,7 @@ def test_upsert(session_db):
               how='upsert')
 
     loaded = pb.read_sql(table_name, con=session_db)
+
+    print(df)
     assert loaded.loc[1, 'float'] == 999
     assert loaded.loc[111, 'float'] == 9999

@@ -20,61 +20,16 @@ https://github.com/pandas-dev/pandas
 and dataset:
 https://github.com/pudo/dataset/
 """
-
+from .helpers import *
 import pandas as pd
-from pandas.api.types import (is_bool_dtype,
-                              is_datetime64_any_dtype,
-                              is_integer_dtype,
-                              is_float_dtype)
 
 from pytz import UTC
 
 import sqlalchemy as sqa
-from sqlalchemy import Table, Column, Integer, String, Float, DateTime, Boolean
+from sqlalchemy import Table
 from sqlalchemy.exc import IntegrityError
 
 import logging
-
-
-PANDABASE_DEFAULT_INDEX_NAME = 'pandabase_index'
-
-
-def engine_builder(con):
-    """
-    Returns a SQLAlchemy engine from a URI (if con is a string)
-    else it just return con without modifying it.
-    """
-    if isinstance(con, str):
-        con = sqa.create_engine(con)
-
-    return con
-
-
-def get_sql_dtype(series):
-    """
-    Take a pd.Series or column of DataFrame, return its SQLAlchemy datatype
-    If it doesn't match anything, return String
-    :param series: pd.Series
-    :return: one of {Integer, Float, Boolean, DateTime, String} or None for all NA
-    """
-    if series.isna().all():
-        return None
-    elif is_bool_dtype(series):
-        return Boolean
-    elif is_integer_dtype(series):
-        return Integer
-    elif is_float_dtype(series):
-        return Float
-    elif is_datetime64_any_dtype(series):
-        return DateTime
-    else:
-        return String
-
-
-def has_table(con, table_name):
-    """pandas.sql.has_table()"""
-    engine = engine_builder(con)
-    return engine.run_callable(engine.dialect.has_table, table_name)
 
 
 def to_sql(df: pd.DataFrame, *,
@@ -82,7 +37,7 @@ def to_sql(df: pd.DataFrame, *,
            table_name: str,
            con: str or sqa.engine,
            how='fail',
-           strict='false', ):
+           strict=True, ):
     """
     Write records stored in a DataFrame to a SQL database, converting any datetime to UTC
 
@@ -119,7 +74,7 @@ def to_sql(df: pd.DataFrame, *,
         raise ValueError('to_sql() requires a DataFrame as input')
 
     if index_col_name is None:
-        index_col_name = PANDABASE_DEFAULT_INDEX_NAME
+        index_col_name = PANDABASE_DEFAULT_INDEX
         df = df.reindex()
         df[index_col_name] = df.index
     else:
@@ -135,7 +90,7 @@ def to_sql(df: pd.DataFrame, *,
                     logging.warning(f'{col} was stored in tz-naive format; automatically converted to UTC')
                 df[col] = pd.to_datetime(df[col], utc=True)
 
-    df_columns = _make_clean_columns_dict(df, index_col_name)
+    df_cols_dict = make_clean_columns_dict(df, index_col_name)
 
     df.index = df[index_col_name]  # this raises if invalid
     if not df.index.is_unique:
@@ -152,27 +107,41 @@ def to_sql(df: pd.DataFrame, *,
         table = Table(table_name, meta, autoload=True, autoload_with=engine)
         if index_col_name not in [col.name for col in table.columns]:
             raise ValueError('index_col_name is not in existing database table')
-        if how == 'upsert' and index_col_name == PANDABASE_DEFAULT_INDEX_NAME:
+        if how == 'upsert' and index_col_name == PANDABASE_DEFAULT_INDEX:
             raise IOError('Cannot upsert with a made-up index!')
 
         new_cols = []
-        for name in df_columns.keys():
-            # check dtypes and PKs match
+        for name, col_info in df_cols_dict.items():
+            # check that dtypes and PKs match for existing columns
             if name in table.columns:
-                if table.columns[name].primary_key != df_columns[name].primary_key:
-                    raise ValueError(f'Inconsistent pk for {name}! db: {table.columns[name].primary_key} / '
-                                     f'df: {df_columns[name].primary_key}')
-                # column.type is not directly comparable, use str(type) or type.python_type?
-                if table.columns[name].type.python_type != df_columns[name].type.python_type:
-                    raise ValueError(f'Inconsistent type for {name}! db: {table.columns[name].type} / '
-                                     f'df: {df_columns[name].type}')
-            # add new columns if needed (sqla does not support migrations directly)
+                if table.columns[name].primary_key != col_info['pk']:
+                    raise ValueError(f'Inconsistent pk for col: {name}! db: {table.columns[name].primary_key} / '
+                                     f'df: {col_info["pk"]}')
+
+                if col_info['dtype'] is None:
+                    print(f'Debug: setting {name} dtype to {table.columns[name].type}')
+                    col_info['dtype'] = get_df_sql_dtype(table.columns[name])
+
+                db_col_type = get_col_sql_dtype(table.columns[name])
+                if not db_col_type == col_info['dtype']:
+                    if col_info['dtype'] == String and not col_info['pk']:
+                        # may be a column with NaNs; ignore
+                        continue
+                    if col_info['dtype'] == Integer and db_col_type == Float:
+                        continue
+                    if col_info['dtype'] == Float and db_col_type == Integer:
+                        continue
+                    raise ValueError(f'Inconsistent type for col: {name}! db: {get_col_sql_dtype(table.columns[name])}/'
+                                     f'df: {col_info["dtype"]}')
+            elif col_info['dtype'] is not None:
+                new_cols.append(make_column(name, col_info))
             else:
-                new_cols.append(Column(name, get_sql_dtype(df[name])))
+                logging.warning(f'tried to add all NaN column {name}')
+                continue
 
         if len(new_cols):
             col_names_string = ", ".join([col.name for col in new_cols])
-            # TODO: confirm sqla automatically adds NaN here
+
             new_column_warning = f' Table[{table_name}]:' + \
                                  f' new Series [{col_names_string}] added around index {df[index_col_name][0]}'
             if strict:
@@ -184,12 +153,13 @@ def to_sql(df: pd.DataFrame, *,
                 with engine.begin() as conn:
                     conn.execute(f'ALTER TABLE {table_name} '
                                  f'ADD COLUMN {new_col.name} {new_col.type.compile(engine.dialect)}')
-            # TODO: new columns are added, but data is not written to them
 
     # 2b. unless it's a brand-new table
     else:
         logging.info(f'Creating new table {table_name}')
-        table = Table(table_name, meta, *df_columns.values())
+        table = Table(table_name, meta,
+                      *[make_column(name, info) for name, info in df_cols_dict.items()
+                        if info['dtype'] is not None])
 
     #####################################
     # 3. create any new tables or columns
@@ -206,54 +176,30 @@ def to_sql(df: pd.DataFrame, *,
             con.execute(table.insert(), [row.to_dict() for i, row in df.iterrows()])
 
     elif how == 'upsert':
-        # explicitly check index uniqueness
         for i in df.index:
+            # check index uniqueness by attempting insert; if it fails, update
             try:
                 with engine.begin() as con:
-                    insert = table.insert().values(df.loc[i].to_dict())
+                    row = df.loc[i]
+                    insert = table.insert().values(row[row.notna()].to_dict())
                     con.execute(insert)
+                    print(row)
+                    print(insert)
             except IntegrityError:
-                print('sqla Integrity Error!')
-            except:
-                if strict:
-                    raise IOError('?????????? unknown')
-                print('Unknown error!')
+                print('SQLAlchemy Integrity Error on insert => do update')
+            except Exception as e:
+                raise IOError(e)
 
             with engine.begin() as con:
+                row = df[[col for col in df.columns if col != index_col_name]].loc[i]
+                # print(row)
                 upsert = table.update() \
                     .where(table.c[index_col_name] == i) \
-                    .values(df[[col for col in df.columns if col != index_col_name]].loc[i].to_dict())
+                    .values(row[row.notna()].to_dict())
+                # print(upsert)
                 con.execute(upsert)
 
     return table
-
-
-def clean_name(name):
-    return name.lower().strip().replace(' ', '_')
-
-
-def _make_clean_columns_dict(df: pd.DataFrame, index_col_name):
-    """Take a DataFrame and index_col_name (or None), return a dictionary {column_name: new Column}"""
-    columns = {}
-    df.columns = [clean_name(col) for col in df.columns]
-
-    if index_col_name is not None:
-        assert index_col_name in df.columns
-    else:
-        columns['id'] = Column('id', Integer, primary_key=True)
-
-    for col_name in df.columns:
-        pk = index_col_name == col_name
-
-        dtype = get_sql_dtype(df[col_name])
-        if dtype is None:
-            # TODO: This fails for all NaN values when inserted later!
-            pass
-
-        columns[col_name] = Column(col_name, get_sql_dtype(df[col_name]), primary_key=pk, )
-
-    assert len(columns) > 1
-    return columns
 
 
 def read_sql(table_name: str,
@@ -297,7 +243,7 @@ def read_sql(table_name: str,
 
     df = pd.read_sql_query(s, engine, index_col=index_col,
                            parse_dates={col: {'utc': True} for col in datetime_cols})
-    if index_col != PANDABASE_DEFAULT_INDEX_NAME:
+    if index_col != PANDABASE_DEFAULT_INDEX:
         df[index_col] = df.index
 
     return df

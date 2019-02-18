@@ -3,34 +3,55 @@
 import pandas as pd
 from pandas.api.types import (is_integer_dtype,
                               is_float_dtype)
+from .helpers import get_df_sql_dtype
+
+
+class CompandaNotEqualError(Exception):
+    def __init__(self, message):
+        super().__init__(message)
 
 
 class Companda(object):
     """output from companda function; evaluates as boolean + holds a message"""
     def __init__(self, equal: bool, msg=''):
         self.equal = equal
-        self.msg = msg
+        self.message = msg
 
     def __bool__(self):
-        return self.equal
+        if not self.equal:
+            raise CompandaNotEqualError(str(self))
+        else:
+            return True
 
     def __repr__(self):
-        return str(self.equal) + self.msg
+        return str(self.equal) + ": " + self.message
 
+    @property
     def msg(self):
         return str(self)
 
 
-def companda(df1: pd.DataFrame, df2: pd.DataFrame, gamma=.0001):
-    """compare two dataframes; return a companda object
+def companda(df1: pd.DataFrame, df2: pd.DataFrame, gamma=.0001, ignore_nan=False):
+    """compare two DataFrames; return a Companda object
 
-    Returns (equal, msg)
+    Args:
+        df1:
+        df2:
+        gamma:
+        ignore_nan: ignore any all_nan columns
 
-    Returns true iff:
-        1. columns are equal (both subsets)
+    Returns: truthy Companda iff:
+        1. columns are equal (both subsets of each other)
         2. indices are equal
         3. data is equal within decimal error gamma
     """
+    if ignore_nan:
+        df1 = df1.copy()
+        df2 = df2.copy()
+        for df in [df1, df2]:
+            for col in df.columns:
+                if get_df_sql_dtype(df[col]) is None:
+                    df.drop([col], axis=1, inplace=True)
     # COLUMNS
     if len(df1.columns) != len(df2.columns):
         return Companda(False, f'len(df1.cols) = {len(df1.columns)}, len(df2.cols) = {len(df2.columns)}')
@@ -60,7 +81,7 @@ def companda(df1: pd.DataFrame, df2: pd.DataFrame, gamma=.0001):
 
     # VALUES
     for col in df1.columns:
-        if not type(df1[col]) == type(df2[col]):
+        if not isinstance(df1[col], type(df2[col])):
             return Companda(False, f"columns and indices equal, but datatypes not equal in column {col}.")
 
         if is_float_dtype(df1[col]) or is_integer_dtype(df1[col]):
