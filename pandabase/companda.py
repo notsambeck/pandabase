@@ -3,7 +3,7 @@
 import pandas as pd
 from pandas.api.types import (is_integer_dtype,
                               is_float_dtype)
-from .helpers import get_df_sql_dtype, PANDABASE_DEFAULT_INDEX
+from .helpers import get_column_dtype, PANDABASE_DEFAULT_INDEX
 
 
 class CompandaNotEqualError(Exception):
@@ -50,7 +50,7 @@ def companda(df1: pd.DataFrame, df2: pd.DataFrame, gamma=.0001, ignore_nan=False
         df2 = df2.copy()
         for df in [df1, df2]:
             for col in df.columns:
-                if get_df_sql_dtype(df[col]) is None:
+                if get_column_dtype(df[col], 'pd') is None:
                     df.drop([col], axis=1, inplace=True)
     # COLUMNS
     if len(df1.columns) != len(df2.columns):

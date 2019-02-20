@@ -58,7 +58,7 @@ def sample_csv_dfs():
     return dfs
 
 
-@pytest.fixture(scope='session')
+@pytest.fixture(scope='function')
 def simple_df():
     """make a dumb DataFrame with multiple dtypes and integer index"""
     rows = 10
@@ -95,30 +95,33 @@ def simple_df2():
 # BASIC TESTS #
 
 
-def test_get_sql_dtype_df(simple_df, simple_df2):
+def test_get_sql_dtype_df(simple_df):
     """test that datatype functions work as expected"""
-    for df in [simple_df, simple_df2]:
-        assert isinstance(df.index, pd.RangeIndex)
+    df = simple_df
 
-        assert is_datetime64_any_dtype(df.date)
-        assert get_df_sql_dtype(df.date) == DateTime
+    assert isinstance(df.index, pd.RangeIndex)
 
-        # assert is_integer_dtype(df.integer)
-        # assert not is_float_dtype(df.integer)
-        assert get_df_sql_dtype(df.integer) == Integer
+    assert is_datetime64_any_dtype(df.date)
+    assert get_column_dtype(df.date, 'sqla') == DateTime
+    assert get_column_dtype(df.date, 'pd') == np.datetime64
 
-        assert is_float_dtype(df.float)
-        assert not is_integer_dtype(df.float)
-        assert get_df_sql_dtype(df.float) == Float
+    # assert is_integer_dtype(df.integer)
+    # assert not is_float_dtype(df.integer)
+    assert get_column_dtype(df.integer, 'sqla') == Integer
+    assert get_column_dtype(df.integer, 'pd') == np.int64
 
-        assert not is_integer_dtype(df.string) and not is_float_dtype(df.string) and \
-            not is_datetime64_any_dtype(df.string) and not is_bool_dtype(df.string)
-        assert get_df_sql_dtype(df.string) == String
+    assert is_float_dtype(df.float)
+    assert not is_integer_dtype(df.float)
+    assert get_column_dtype(df.float, 'sqla') == Float
 
-        assert is_bool_dtype(df.boolean)
-        assert get_df_sql_dtype(df.boolean) == Boolean
+    assert not is_integer_dtype(df.string) and not is_float_dtype(df.string) and \
+        not is_datetime64_any_dtype(df.string) and not is_bool_dtype(df.string)
+    assert get_column_dtype(df.string, 'sqla') == String
 
-        assert get_df_sql_dtype(df.nan) is None
+    assert is_bool_dtype(df.boolean)
+    assert get_column_dtype(df.boolean, 'sqla') == Boolean
+
+    assert get_column_dtype(df.nan, 'pd') is None
 
 
 def test_get_sql_dtype_db(simple_df, empty_db):
@@ -132,7 +135,7 @@ def test_get_sql_dtype_db(simple_df, empty_db):
     for col in table.columns:
         if col.name == PANDABASE_DEFAULT_INDEX:
             continue
-        assert get_db_col_dtype(col, pd_or_sqla='sqla') == get_df_sql_dtype(df[col.name])
+        assert get_column_dtype(col, 'sqla') == get_column_dtype(df[col.name], 'sqla')
 
 
 # WRITE TO SQL TESTS #
@@ -153,6 +156,15 @@ def test_create_table(session_db, simple_df):
     # print(loaded)
     assert pb.companda(loaded, simple_df, ignore_nan=True)
     assert pb.has_table(session_db, 'sample')
+
+
+def test_read_table(session_db, simple_df):
+    assert has_table(session_db, 'sample')
+
+    df = pb.read_sql('sample', session_db)
+
+    print(df.dtypes)
+    assert isinstance(df, pd.DataFrame)
 
 
 def test_overwrite_table_fails(session_db, simple_df):
@@ -205,7 +217,7 @@ def test_upsert(session_db):
     df = pb.read_sql(table_name, con=session_db)
 
     df.loc[1, 'float'] = 999
-    df.loc[2, 'string'] = 'fitty'
+    df.loc[12, 'string'] = 'fitty'
     df.loc[111, 'float'] = 9999
 
     pb.to_sql(df,
@@ -216,9 +228,10 @@ def test_upsert(session_db):
 
     loaded = pb.read_sql(table_name, con=session_db)
 
+    print(loaded)
     assert loaded.loc[1, 'float'] == 999
     assert loaded.loc[111, 'float'] == 9999
-    assert loaded.loc[2, 'string'] == 'fitty'
+    assert loaded.loc[12, 'string'] == 'fitty'
     assert loaded.loc[111, 'string'] is None
 
 

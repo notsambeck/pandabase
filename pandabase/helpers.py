@@ -3,8 +3,7 @@ import numpy as np
 from pandas.api.types import (is_bool_dtype,
                               is_datetime64_any_dtype,
                               is_integer_dtype,
-                              is_float_dtype,
-                              is_string_dtype)
+                              is_float_dtype, )
 
 import sqlalchemy as sqa
 from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean
@@ -24,42 +23,47 @@ def engine_builder(con):
     return con
 
 
-def get_df_sql_dtype(s):
+def get_column_dtype(column, pd_or_sqla):
     """
-    Take a pd.Series or column of DataFrame, return its SQLAlchemy datatype
-    If it doesn't match anything, return String
+    Take a column (sqlalchemy table.Column or df.Series), return its dtype in Pandas or SQLA
+
+    If it doesn't match anything else, return String
+
     Args:
-        pd.Series
+        column: pd.Series or SQLA.table.column
+        pd_or_sqla: either 'pd' or 'sqla': which kind of type to return
     Returns:
-        sqlalchemy Type or None
-        one of {Integer, Float, Boolean, DateTime, String, or None (for all NaN)}
+        Type or None
+            if pd_or_sqla == 'sqla':
+                one of {Integer, Float, Boolean, DateTime, String, or None (for all NaN)}
+            if pd_or_sqla == 'pd':
+                one of {np.int64, np.float64, np.datetime64, np.bool_, np.str_}
     """
-    if s.isna().all():
-        return None
+    def _get_type_from_df_col(col):
+        """
+        Take a pd.Series or column of DataFrame, return its SQLAlchemy datatype
+        If it doesn't match anything, return String
+        Args:
+            pd.Series
+        Returns:
+            sqlalchemy Type or None
+            one of {Integer, Float, Boolean, DateTime, String, or None (for all NaN)}
+        """
+        if col.isna().all():
+            return None
 
-    if is_bool_dtype(s):
-        return Boolean
-    elif is_integer_dtype(s):
-        return Integer
-    elif is_float_dtype(s):
-        return Float
-    elif is_datetime64_any_dtype(s):
-        return DateTime
-    else:
-        return String
+        if is_bool_dtype(col):
+            return Boolean
+        elif is_integer_dtype(col):
+            return Integer
+        elif is_float_dtype(col):
+            return Float
+        elif is_datetime64_any_dtype(col):
+            return DateTime
+        else:
+            return String
 
-
-def get_db_col_dtype(column, pd_or_sqla='pd'):
-    """
-    Take a sqlalchemy table.Column, return its pandas datatype
-    If it doesn't match anything, return String
-    Args:
-        pd.Series
-    Returns:
-        sqlalchemy Type or None
-        one of {Integer, Float, Boolean, DateTime, String, or None (for all NaN)}
-    """
-    def _get_sqla_type(col):
+    def _get_type_from_db_col(col):
         if isinstance(col.type, sqa.types.Integer):
             return Integer
         elif isinstance(col.type, sqa.types.Float):
@@ -71,18 +75,26 @@ def get_db_col_dtype(column, pd_or_sqla='pd'):
         else:
             return String
 
-    t = _get_sqla_type(column)
-    if pd_or_sqla == 'sqla':
+    if isinstance(column, sqa.Column):
+        t = _get_type_from_db_col(column)
+    elif isinstance(column, (pd.Series, pd.Index)):
+        t = _get_type_from_df_col(column)
+    else:
+        raise ValueError(f'Expected some kind of a column, got {type(column)}')
+
+    if t is None:
+        return None
+    elif pd_or_sqla == 'sqla':
         return t
     elif pd_or_sqla == 'pd':
         lookup = {Integer: np.int64,
                   Float: np.float64,
-                  DateTime: pd.datetime,
+                  DateTime: np.datetime64,
                   Boolean: np.bool_,
                   String: np.str_}
         return lookup[t]
     else:
-        raise ValueError(f'Select pd_or_sqla: param = "pd" or "sqla"')
+        raise ValueError(f'Select pd_or_sqla must equal either "pd" or "sqla"')
 
 
 def has_table(con, table_name):
@@ -103,7 +115,7 @@ def make_clean_columns_dict(df: pd.DataFrame):
 
     for col_name in df.columns:
 
-        dtype = get_df_sql_dtype(df[col_name])
+        dtype = get_column_dtype(df[col_name], 'sqla')
         if dtype is None:
             print('found dtype == None!')
 
@@ -114,7 +126,7 @@ def make_clean_columns_dict(df: pd.DataFrame):
 
     assert len(columns) > 1
 
-    columns[index] = {'dtype': get_df_sql_dtype(df.index),
+    columns[index] = {'dtype': get_column_dtype(df.index, 'sqla'),
                       'pk': True}
 
     return columns

@@ -21,7 +21,9 @@ and dataset:
 https://github.com/pudo/dataset/
 """
 from .helpers import *
+
 import pandas as pd
+from pandas.api.types import is_string_dtype
 
 from pytz import UTC
 
@@ -118,22 +120,23 @@ def to_sql(df: pd.DataFrame, *,
                                      f'df: {df_col_info["pk"]}')
 
                 if df_col_info['dtype'] is None:
-                    df_col_info['dtype'] = get_db_col_dtype(col)
+                    df_col_info['dtype'] = get_column_dtype(col, pd_or_sqla='pd')
 
-                stored_pandas_dtype = get_db_col_dtype(col, pd_or_sqla='pd')
-                if not stored_pandas_dtype == df_col_info['dtype']:
-                    if is_datetime64_any_dtype(stored_pandas_dtype):
+                db_sqla_dtype = get_column_dtype(col, pd_or_sqla='sqla')
+                if not db_sqla_dtype == df_col_info['dtype']:
+                    db_pandas_dtype = get_column_dtype(col, pd_or_sqla='pd')
+                    if is_datetime64_any_dtype(db_pandas_dtype):
                         df[name] = pd.to_datetime(df[name].values, utc=True)
                     elif (
                             is_string_dtype(df_col_info['dtype']) and not df_col_info['pk']) or (
-                            is_integer_dtype(df_col_info['dtype']) and is_float_dtype(stored_pandas_dtype)) or (
-                            is_float_dtype(df_col_info['dtype']) and is_integer_dtype(stored_pandas_dtype)
+                            is_integer_dtype(df_col_info['dtype']) and is_float_dtype(db_pandas_dtype)) or (
+                            is_float_dtype(df_col_info['dtype']) and is_integer_dtype(db_pandas_dtype)
                     ):
-                        df[name] = df[name].astype(get_db_col_dtype(col, pd_or_sqla='pd'))
+                        df[name] = df[name].astype(db_pandas_dtype)
                     else:
                         raise ValueError(
-                            f'Inconsistent type for col: {name}! '
-                            f'db: {stored_pandas_dtype} /'
+                            f'Inconsistent type for col: {name}.  '
+                            f'db: {db_pandas_dtype} /'
                             f'df: {df_col_info["dtype"]}')
             elif df_col_info['dtype'] is not None:
                 new_cols.append(make_column(name, df_col_info))
@@ -175,7 +178,9 @@ def to_sql(df: pd.DataFrame, *,
         with engine.begin() as con:
             rows = []
             for index, row in df.iterrows():
+                # append row
                 rows.append(row.to_dict())
+                # add index name to row
                 rows[-1][df.index.name] = index
             con.execute(table.insert(), rows)
 
@@ -185,20 +190,22 @@ def to_sql(df: pd.DataFrame, *,
             try:
                 with engine.begin() as con:
                     row = df.loc[i]
-                    values = row[row.notna()].to_dict()
-                    values[df.index.name] = i
+                    row[row.isna()] = None
+                    values = row.to_dict()
+                    values[df.index.name] = i    # set index column to i
                     insert = table.insert().values(values)
                     con.execute(insert)
 
             except IntegrityError:
                 print('Upsert: Integrity Error on insert => do update')
 
-            with engine.begin() as con:
-                row = df.loc[i]
-                upsert = table.update() \
-                    .where(table.c[df.index.name] == i) \
-                    .values(row[row.notna()].to_dict())
-                con.execute(upsert)
+                with engine.begin() as con:
+                    row = df.loc[i]
+                    row[row.isna()] = None
+                    upsert = table.update() \
+                        .where(table.c[df.index.name] == i) \
+                        .values(row.to_dict())
+                    con.execute(upsert)
 
     return table
 
@@ -237,15 +244,16 @@ def read_sql(table_name: str,
 
     datetime_cols = []
     other_cols = {}
+    datetime_index = False
 
     for col in table.columns:
-        dtype = get_db_col_dtype(col, pd_or_sqla='pd')
+        dtype = get_column_dtype(col, pd_or_sqla='pd')
         if col.primary_key:
             index_col = col.name
-            datetime_index = dtype == pd.datetime
+            datetime_index = is_datetime64_any_dtype(dtype)
             continue
 
-        if dtype == pd.datetime:
+        if is_datetime64_any_dtype(dtype):
             datetime_cols.append(col.name)
         else:
             other_cols[col.name] = dtype
