@@ -8,7 +8,6 @@ from pandas.api.types import (is_bool_dtype,
 import sqlalchemy as sqa
 from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean
 
-
 PANDABASE_DEFAULT_INDEX = 'pandabase_index'
 
 
@@ -39,6 +38,7 @@ def get_column_dtype(column, pd_or_sqla):
             if pd_or_sqla == 'pd':
                 one of {np.int64, np.float64, np.datetime64, np.bool_, np.str_}
     """
+
     def _get_type_from_df_col(col):
         """
         Take a pd.Series or column of DataFrame, return its SQLAlchemy datatype
@@ -108,10 +108,10 @@ def clean_name(name):
 
 
 def make_clean_columns_dict(df: pd.DataFrame):
-    """Take a DataFrame and index_col_name, return a dictionary {name: {Column info}}"""
+    """Take a DataFrame and use_index, return a dictionary {name: {Column info}} (including index or not)"""
     columns = {}
     df.columns = [clean_name(col) for col in df.columns]
-    index = clean_name(df.index.name)
+    index_name = clean_name(df.index.name)
 
     for col_name in df.columns:
 
@@ -126,8 +126,8 @@ def make_clean_columns_dict(df: pd.DataFrame):
 
     assert len(columns) > 1
 
-    columns[index] = {'dtype': get_column_dtype(df.index, 'sqla'),
-                      'pk': True}
+    columns[index_name] = {'dtype': get_column_dtype(df.index, 'sqla'),
+                           'pk': True}
 
     return columns
 

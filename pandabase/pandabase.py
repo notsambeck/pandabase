@@ -35,13 +35,15 @@ import logging
 
 
 def to_sql(df: pd.DataFrame, *,
-           use_index: bool,
            table_name: str,
            con: str or sqa.engine,
            how='fail',
            strict=True, ):
     """
-    Write records stored in a DataFrame to a SQL database, converting any datetime to UTC
+    Write records stored in a DataFrame to a SQL database.
+
+    converts any datetime to UTC
+    Requires a unique, named index as DataFrame.index; to insert into existing database, this must be consistent
 
     Parameters
     ----------
@@ -59,8 +61,7 @@ def to_sql(df: pd.DataFrame, *,
             create table if needed
             if record exists: update
             else: insert
-    use_index : True to use df.index, False to new range_index named pandabase_index
-        (Applied to both DataFrame and sql database)
+    use_index: default True; if True, use the index as pk in table, else use an automatic integer index
     strict: default False; if True, fail instead of coercing anything
     """
     ##########################################
@@ -75,87 +76,26 @@ def to_sql(df: pd.DataFrame, *,
     if not isinstance(df, pd.DataFrame):
         raise ValueError('to_sql() requires a DataFrame as input')
 
-    if use_index is False:
-        df = df.reindex()
-        df.index.name = PANDABASE_DEFAULT_INDEX
-    elif df.index.name is None:
-        raise ValueError('Cannot use unnamed index column (it is confusing)')
-    else:
-        df.index.name = clean_name(df.index.name)
+    if not df.index.is_unique:
+        raise ValueError('DataFrame index is not unique.')
+    if df.index.hasnans:
+        raise ValueError('DataFrame index has NaN values.')
+    if df.index.name is None:
+        raise ValueError('DataFrame index needs to have a name (set with df.index.name = >.')
 
-    # convert any non-tz-aware datetimes to utc using pd.to_datetime (warn)
-    for col in df.columns:
-        if is_datetime64_any_dtype(df[col]):
-            if df[col].dt.tz != UTC:
-                if strict:
-                    raise ValueError(f'Strict=True; column {col} is tz-naive. Please correct.')
-                else:
-                    logging.warning(f'{col} was stored in tz-naive format; automatically converted to UTC')
-                df[col] = pd.to_datetime(df[col], utc=True)
-
+    # make a list of df columns for later:
     df_cols_dict = make_clean_columns_dict(df)
 
-    if not df.index.is_unique or not df.index.notna().all():
-        raise ValueError('Specified DataFrame index is not unique; maybe use index=None to add integer as PK')
-        # we will check that index_col_name is in db.table later (after we have reflected db)
-
-    ############################################################################
-    # 2a. get existing table metadata from db, add any new columns from df to db
+    ###########################################
+    # 2. make table from db schema; table will be the reference
     if has_table(engine, table_name):
         if how == 'fail':
             raise NameError(f'Table {table_name} already exists; param if_exists is set to "fail".')
 
         table = Table(table_name, meta, autoload=True, autoload_with=engine)
 
-        if how == 'upsert' and df.index.name == PANDABASE_DEFAULT_INDEX:
-            raise IOError('Cannot upsert with a made-up index!')
-
-        new_cols = []
-        for name, df_col_info in df_cols_dict.items():
-            # check that dtypes and PKs match for existing columns
-            if name in table.columns:
-                col = table.columns[name]
-                if col.primary_key != df_col_info['pk']:
-                    raise ValueError(f'Inconsistent pk for col: {name}! db: {col.primary_key} / '
-                                     f'df: {df_col_info["pk"]}')
-
-                if df_col_info['dtype'] is None:
-                    df_col_info['dtype'] = get_column_dtype(col, pd_or_sqla='pd')
-
-                db_sqla_dtype = get_column_dtype(col, pd_or_sqla='sqla')
-                if not db_sqla_dtype == df_col_info['dtype']:
-                    db_pandas_dtype = get_column_dtype(col, pd_or_sqla='pd')
-                    if is_datetime64_any_dtype(db_pandas_dtype):
-                        df[name] = pd.to_datetime(df[name].values, utc=True)
-                    elif (
-                            is_string_dtype(df_col_info['dtype']) and not df_col_info['pk']) or (
-                            is_integer_dtype(df_col_info['dtype']) and is_float_dtype(db_pandas_dtype)) or (
-                            is_float_dtype(df_col_info['dtype']) and is_integer_dtype(db_pandas_dtype)
-                    ):
-                        df[name] = df[name].astype(db_pandas_dtype)
-                    else:
-                        raise ValueError(
-                            f'Inconsistent type for col: {name}.  '
-                            f'db: {db_pandas_dtype} /'
-                            f'df: {df_col_info["dtype"]}')
-            elif df_col_info['dtype'] is not None:
-                new_cols.append(make_column(name, df_col_info))
-            else:
-                logging.warning(f'tried to add all NaN column {name}')
-                continue
-
-        if len(new_cols):
-            col_names_string = ", ".join([col.name for col in new_cols])
-
-            new_column_warning = f' Table[{table_name}]:' + \
-                                 f' new Series [{col_names_string}] added around index {df.index[0]}'
-            if strict:
-                logging.warning(new_column_warning)
-
-            for new_col in new_cols:
-                with engine.begin() as conn:
-                    conn.execute(f'ALTER TABLE {table_name} '
-                                 f'ADD COLUMN {new_col.name} {new_col.type.compile(engine.dialect)}')
+        if how == 'upsert' and table.primary_key == PANDABASE_DEFAULT_INDEX:
+            raise IOError('Cannot upsert with an automatic index')
 
     # 2b. unless it's a brand-new table
     else:
@@ -164,8 +104,91 @@ def to_sql(df: pd.DataFrame, *,
                       *[make_column(name, info) for name, info in df_cols_dict.items()
                         if info['dtype'] is not None])
 
-    #####################################
-    # 3. create any new tables or columns
+    ###############################################################
+    # 3. iterate over df_columns; confirm that types are compatible and all columns exist
+    new_cols = []
+    for name, df_col_info in df_cols_dict.items():
+        if name not in table.columns:
+            if df_col_info['dtype'] is not None:
+                new_cols.append(make_column(name, df_col_info))
+                continue
+
+            else:
+                logging.warning(f'tried to add all NaN column {name}')
+                continue
+
+        # check that dtypes and PKs match for existing columns
+        col = table.columns[name]
+        if col.primary_key != df_col_info['pk']:
+            raise ValueError(f'Inconsistent pk for col: {name}! db: {col.primary_key} / '
+                             f'df: {df_col_info["pk"]}')
+
+        if df_col_info['dtype'] is None:
+            df_col_info['dtype'] = get_column_dtype(col, pd_or_sqla='pd')
+
+        db_sqla_dtype = get_column_dtype(col, pd_or_sqla='sqla')
+
+        # COERCE BAD DATATYPES
+        if not db_sqla_dtype == df_col_info['dtype']:
+            """
+            this is where things become complicated
+            
+            we know type of existing db_column; this is the correct type for new data
+            we know the pandas dtype of df column
+            
+            this section of code will generally execute if the db dtype is a real type, and df dtype is 'object'
+            often as a result of the df column being a non-nullable Pandas dtype (np.int64, np.bool) with Nans, 
+            and the db column being the 'true' datatype (possibly plus NULL)
+            
+            simply coercing the column with .astype(np.bool) etc. also coerces None to 'None"
+            
+            solution?
+            build a mask of NaN values
+            coerce columns
+            when inserting values to db, 
+                first check if value is None, 
+                then insert
+                
+            or:
+            don't check types if values in 'object' columns are in fact stored in correct dtype (check this!)
+            """
+            db_pandas_dtype = get_column_dtype(col, pd_or_sqla='pd')
+            if is_datetime64_any_dtype(db_pandas_dtype):
+                df[name] = pd.to_datetime(df[name].values, utc=True)
+            elif (
+                    is_integer_dtype(df_col_info['dtype']) and is_float_dtype(db_pandas_dtype)) or (
+                    is_float_dtype(df_col_info['dtype']) and is_integer_dtype(db_pandas_dtype)
+            ):
+                df[name] = df[name].astype(db_pandas_dtype)
+            else:
+                raise ValueError(
+                    f'Inconsistent type for col: {name}.  '
+                    f'db: {db_pandas_dtype} /'
+                    f'df: {df_col_info["dtype"]}')
+
+    # Make any new columns as needed with ALTER TABLE
+    if new_cols:
+        col_names_string = ", ".join([col.name for col in new_cols])
+        new_column_warning = f' Table[{table_name}]:' + \
+                             f' new Series [{col_names_string}] added around index {df.index[0]}'
+        if strict:
+            logging.warning(new_column_warning)
+
+        for new_col in new_cols:
+            with engine.begin() as conn:
+                conn.execute(f'ALTER TABLE {table_name} '
+                             f'ADD COLUMN {new_col.name} {new_col.type.compile(engine.dialect)}')
+
+    df.index.name = clean_name(df.index.name)
+
+    # convert any non-tz-aware datetimes to utc using pd.to_datetime (warn)
+    for col in df.columns:
+        if is_datetime64_any_dtype(df[col]) and df[col].dt.tz != UTC:
+            if strict:
+                raise ValueError(f'Strict=True; column {col} is tz-naive. Please correct.')
+            else:
+                logging.warning(f'{col} was stored in tz-naive format; automatically converted to UTC')
+            df[col] = pd.to_datetime(df[col].values, utc=True)
 
     with engine.begin() as con:
         meta.create_all(bind=con)
@@ -192,7 +215,7 @@ def to_sql(df: pd.DataFrame, *,
                     row = df.loc[i]
                     row[row.isna()] = None
                     values = row.to_dict()
-                    values[df.index.name] = i    # set index column to i
+                    values[df.index.name] = i  # set index column to i
                     insert = table.insert().values(values)
                     con.execute(insert)
 

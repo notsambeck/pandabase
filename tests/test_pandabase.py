@@ -64,21 +64,26 @@ def simple_df():
     rows = 10
     df = pd.DataFrame(columns=['date', 'integer', 'float', 'string', 'boolean', 'nan'],
                       index=range(rows),)
+    df.index.name = 'arbitrary_index'
+
     df.date = pd.date_range(pd.to_datetime('2001-01-01 12:00am', utc=True), periods=10, freq='d')
     df.integer = range(7, 17)
     df.float = [float(i) / 10 for i in range(10)]
     df.string = list('panda_base')
     df.boolean = [True, False] * 5
     df.nan = [None] * 10
+
     return df
 
 
 @pytest.fixture(scope='session')
 def simple_df2():
-    """make a dumb DataFrame with multiple dtypes and integer index"""
+    """make a dumb DataFrame with multiple dtypes and integer index, index is valid but columns.hasnans"""
     rows = 10
     df = pd.DataFrame(columns=['date', 'integer', 'float', 'string', 'boolean', 'nan'],
                       index=range(rows),)
+    df.index.name = 'arbitrary_index'
+
     df.date = pd.date_range(pd.to_datetime('2006-01-01 12:00am', utc=True), periods=10, freq='d')
     df.integer = range(17, 27)
     df.float = [float(i) / 99 for i in range(10)]
@@ -89,6 +94,7 @@ def simple_df2():
     df.loc[2, 'integer'] = None
     df.loc[3, 'datetime'] = None
     df.loc[4, 'string'] = None
+
     return df
 
 
@@ -128,12 +134,13 @@ def test_get_sql_dtype_db(simple_df, empty_db):
     """test that datatype functions work as expected"""
     df = simple_df
     table = pb.to_sql(simple_df,
-                      use_index=False,
                       table_name='sample',
                       con=empty_db,
                       how='fail')
+
     for col in table.columns:
-        if col.name == PANDABASE_DEFAULT_INDEX:
+        if col.primary_key:
+            assert get_column_dtype(col, 'sqla') == get_column_dtype(df.index, 'sqla')
             continue
         assert get_column_dtype(col, 'sqla') == get_column_dtype(df[col.name], 'sqla')
 
@@ -145,11 +152,10 @@ def test_create_table(session_db, simple_df):
     assert not pb.has_table(session_db, 'sample')
 
     table = pb.to_sql(simple_df,
-                      use_index=False,
                       table_name='sample',
                       con=session_db,
                       how='fail')
-    assert table.columns['pandabase_index'].primary_key
+    assert table.columns['arbitrary_index'].primary_key
     assert pb.has_table(session_db, 'sample')
 
     loaded = pb.read_sql('sample', con=session_db)
@@ -172,7 +178,6 @@ def test_overwrite_table_fails(session_db, simple_df):
 
     with pytest.raises(NameError):
         pb.to_sql(simple_df,
-                  use_index=False,
                   table_name='sample',
                   con=session_db,
                   how='fail')
@@ -187,7 +192,6 @@ def test_create_table_with_index(session_db, simple_df, table_name, col_name):
     df.drop(col_name, axis=1, inplace=True)
 
     table = pb.to_sql(df,
-                      use_index=True,
                       table_name=table_name,
                       con=session_db,
                       how='fail')
@@ -201,16 +205,6 @@ def test_create_table_with_index(session_db, simple_df, table_name, col_name):
         raise ValueError(c.msg)
 
 
-def test_upsert_fails_no_index(session_db, simple_df):
-    table_name = 'sample'
-    with pytest.raises(IOError):
-        pb.to_sql(simple_df,
-                  use_index=False,
-                  table_name=table_name,
-                  con=session_db,
-                  how='upsert')
-
-
 def test_upsert(session_db):
     table_name = 'integer_index'
     assert pb.has_table(session_db, table_name)
@@ -221,7 +215,6 @@ def test_upsert(session_db):
     df.loc[111, 'float'] = 9999
 
     pb.to_sql(df,
-              use_index=True,
               table_name=table_name,
               con=session_db,
               how='upsert')
@@ -251,7 +244,6 @@ def test_upsert_fails(session_db, simple_df):
         with pytest.raises(StatementError):
             print(i)
             pb.to_sql(df[i:i+1],
-                      use_index=True,
                       table_name='integer_index',
                       con=session_db,
                       how='upsert')

@@ -10,4 +10,6 @@ designed specifically for time series datasets that need to be updated frequentl
 
 ### Design Considerations
 * Minimal dependencies: SQLAlchemy and Pandas only
-* 
+* Database is source of truth
+    * coerce any DataFrames to fit existing schema
+    * except for new columns which may be added late
