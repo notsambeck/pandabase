@@ -124,7 +124,7 @@ def make_clean_columns_dict(df: pd.DataFrame):
             'pk': False,
         }
 
-    assert len(columns) > 1
+    assert len(columns) > 0
 
     columns[index_name] = {'dtype': get_column_dtype(df.index, 'sqla'),
                            'pk': True}

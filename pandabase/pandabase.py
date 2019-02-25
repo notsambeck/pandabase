@@ -65,7 +65,7 @@ def to_sql(df: pd.DataFrame, *,
     strict: default False; if True, fail instead of coercing anything
     """
     ##########################################
-    # 1. make connection objects; check inputs
+    # 1. make connection objects; validate inputs
     df = df.copy()
     engine = engine_builder(con)
     meta = sqa.MetaData()
@@ -81,13 +81,13 @@ def to_sql(df: pd.DataFrame, *,
     if df.index.hasnans:
         raise ValueError('DataFrame index has NaN values.')
     if df.index.name is None:
-        raise ValueError('DataFrame index needs to have a name (set with df.index.name = >.')
+        raise ValueError('DataFrame.index.name == None; must set with df.index.name')
 
     # make a list of df columns for later:
     df_cols_dict = make_clean_columns_dict(df)
 
     ###########################################
-    # 2. make table from db schema; table will be the reference
+    # 2a. make table from db schema; table will be the reference
     if has_table(engine, table_name):
         if how == 'fail':
             raise NameError(f'Table {table_name} already exists; param if_exists is set to "fail".')
@@ -105,9 +105,12 @@ def to_sql(df: pd.DataFrame, *,
                         if info['dtype'] is not None])
 
     ###############################################################
-    # 3. iterate over df_columns; confirm that types are compatible and all columns exist
+    # 3. iterate over df_columns; confirm that types are compatible and all columns exist, delete empty columns
     new_cols = []
+    drop_cols = []
     for name, df_col_info in df_cols_dict.items():
+        if df_col_info['dtype'] is None:
+            drop_cols.append(name)
         if name not in table.columns:
             if df_col_info['dtype'] is not None:
                 new_cols.append(make_column(name, df_col_info))
@@ -148,10 +151,9 @@ def to_sql(df: pd.DataFrame, *,
             when inserting values to db, 
                 first check if value is None, 
                 then insert
-                
-            or:
-            don't check types if values in 'object' columns are in fact stored in correct dtype (check this!)
             """
+            mask = df.isna()
+
             db_pandas_dtype = get_column_dtype(col, pd_or_sqla='pd')
             if is_datetime64_any_dtype(db_pandas_dtype):
                 df[name] = pd.to_datetime(df[name].values, utc=True)
@@ -160,11 +162,21 @@ def to_sql(df: pd.DataFrame, *,
                     is_float_dtype(df_col_info['dtype']) and is_integer_dtype(db_pandas_dtype)
             ):
                 df[name] = df[name].astype(db_pandas_dtype)
+                df[mask][name] = None
+            elif is_string_dtype(df_col_info['dtype']):
+                df[name] = df[name].astype(db_pandas_dtype)
+                df[mask][name] = None
             else:
                 raise ValueError(
                     f'Inconsistent type for col: {name}.  '
                     f'db: {db_pandas_dtype} /'
                     f'df: {df_col_info["dtype"]}')
+
+    # delete any all-NaN columns
+    if drop_cols:
+        df.drop(drop_cols, axis=1, inplace=True)
+        for col in drop_cols:
+            del df_cols_dict[col]
 
     # Make any new columns as needed with ALTER TABLE
     if new_cols:
@@ -254,16 +266,15 @@ def read_sql(table_name: str,
     index_col = None
 
     # make selector from columns, or select whole table
-    if columns is not None:
+    if columns is None:
+        s = sqa.select([table])
+    else:
         if index_col not in columns:
             raise NameError(f'User supplied columns do not include index col: {index_col}')
         selector = []
         for col in columns:
             selector.append(table.c[col])
         s = sqa.select(selector)
-
-    else:
-        s = sqa.select([table])
 
     datetime_cols = []
     other_cols = {}
@@ -282,12 +293,11 @@ def read_sql(table_name: str,
             other_cols[col.name] = dtype
 
     df = pd.read_sql_query(s, engine, index_col=index_col)
-
-    for name, dtype in other_cols.items():
-        df[name] = df[name].astype(dtype)
+    # mask = df.isna()
 
     for name in datetime_cols:
         df[name] = pd.to_datetime(df[name].values, utc=True)
+        # df[mask][name] = pd.NaT
 
     if datetime_index:
         index = pd.to_datetime(df.index.values, utc=True)
