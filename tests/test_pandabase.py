@@ -15,11 +15,12 @@ from pandas.api.types import (is_bool_dtype,
                               is_integer_dtype,
                               is_float_dtype)
 
-from sqlalchemy.exc import StatementError
 from sqlalchemy import Integer, String, Float, DateTime, Boolean
 
 import os
 import logging
+
+TABLE_NAME = 'preloaded'
 TEST_LOG = os.path.join('tests', 'test_log.log')
 # rewrite logfile following each test
 logging.basicConfig(level=logging.DEBUG, filename=TEST_LOG, filemode='w')
@@ -40,7 +41,7 @@ def empty_db():
 def full_db(empty_db, simple_df):
     """In-memory database fixture; not persistent"""
     pb.to_sql(simple_df,
-              table_name='preloaded',
+              table_name=TABLE_NAME,
               con=empty_db,
               how='fail')
     return empty_db
@@ -175,9 +176,9 @@ def test_create_table(session_db, simple_df):
 
 
 def test_read_table(full_db, simple_df):
-    assert has_table(full_db, 'preloaded')
+    assert has_table(full_db, TABLE_NAME)
 
-    df = pb.read_sql('preloaded', full_db)
+    df = pb.read_sql(TABLE_NAME, full_db)
 
     orig_dict = make_clean_columns_dict(simple_df)
     df_dict = make_clean_columns_dict(df)
@@ -202,7 +203,7 @@ def test_read_written_table(session_db, simple_df):
 
 
 def test_overwrite_table_fails(full_db, simple_df):
-    table_name = 'preloaded'
+    table_name = TABLE_NAME
     assert pb.has_table(full_db, table_name)
 
     with pytest.raises(NameError):
@@ -212,20 +213,20 @@ def test_overwrite_table_fails(full_db, simple_df):
                   how='fail')
 
 
-@pytest.mark.parametrize('table_name, col_name', [['integer_index', 'integer'],
-                                                  ['float_index', 'float'],
-                                                  ['datetime_index', 'date'], ])
-def test_create_table_with_index(session_db, simple_df, table_name, col_name):
+@pytest.mark.parametrize('table_name, index_col_name', [['integer_index', 'integer'],
+                                                        ['float_index', 'float'],
+                                                        ['datetime_index', 'date'], ])
+def test_create_table_with_index(session_db, simple_df, table_name, index_col_name):
     df = simple_df.copy()
-    df.index = df[col_name]
-    df.drop(col_name, axis=1, inplace=True)
+    df.index = df[index_col_name]
+    df.drop(index_col_name, axis=1, inplace=True)
 
     table = pb.to_sql(df,
                       table_name=table_name,
                       con=session_db,
                       how='fail')
 
-    assert table.columns[col_name].primary_key
+    assert table.columns[index_col_name].primary_key
     assert pb.has_table(session_db, table_name)
 
     loaded = pb.read_sql(table_name, con=session_db)
@@ -234,8 +235,8 @@ def test_create_table_with_index(session_db, simple_df, table_name, col_name):
         raise ValueError(c.msg)
 
 
-def test_upsert_complete(full_db):
-    table_name = 'preloaded'
+def test_upsert_complete_rows(full_db):
+    table_name = TABLE_NAME
     assert pb.has_table(full_db, table_name)
     df = pb.read_sql(table_name, con=full_db)
 
@@ -252,7 +253,7 @@ def test_upsert_complete(full_db):
     assert loaded.isna().sum().sum() == 0
 
 
-def test_upsert_incomplete(session_db):
+def test_upsert_incomplete_rows(session_db):
     """test upsert on partial records"""
     table_name = 'integer_index'
     assert pb.has_table(session_db, table_name)
@@ -283,41 +284,41 @@ def test_upsert_incomplete(session_db):
 
 
 def test_upsert_valid_float(full_db):
-    assert pb.has_table(full_db, 'preloaded')
+    assert pb.has_table(full_db, TABLE_NAME)
 
     df = pd.DataFrame(index=[1], columns=['float'], data=[[1.666]])
     df.index.name = 'arbitrary_index'
 
     pb.to_sql(df,
-              table_name='preloaded',
+              table_name=TABLE_NAME,
               con=full_db,
               how='upsert')
 
-    loaded = pb.read_sql('preloaded', con=full_db)
+    loaded = pb.read_sql(TABLE_NAME, con=full_db)
     assert loaded.loc[1, 'float'] == 1.666
     assert not loaded['string'].hasnans
 
 
 @pytest.mark.parametrize('how', ['upsert', 'append'])
 def test_upsert_fails_invalid_float(full_db, how):
-    assert pb.has_table(full_db, 'preloaded')
+    assert pb.has_table(full_db, TABLE_NAME)
 
     df = pd.DataFrame(index=[1], columns=['float'], data=[['x']])
 
     with pytest.raises(ValueError):
         pb.to_sql(df,
-                  table_name='preloaded',
+                  table_name=TABLE_NAME,
                   con=full_db,
                   how=how)
 
 
 def test_upsert_fails_invalid_date(full_db):
-    assert pb.has_table(full_db, 'preloaded')
+    assert pb.has_table(full_db, TABLE_NAME)
 
     df = pd.DataFrame(index=[1], columns=['date'], data=[['x']])
 
     with pytest.raises(ValueError):
         pb.to_sql(df,
-                  table_name='preloaded',
+                  table_name=TABLE_NAME,
                   con=full_db,
                   how='upsert')

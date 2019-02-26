@@ -116,9 +116,6 @@ def make_clean_columns_dict(df: pd.DataFrame):
     for col_name in df.columns:
 
         dtype = get_column_dtype(df[col_name], 'sqla')
-        if dtype is None:
-            print('found dtype == None!')
-
         columns[col_name] = {
             'dtype': dtype,
             'pk': False,

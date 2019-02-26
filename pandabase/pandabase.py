@@ -61,7 +61,6 @@ def to_sql(df: pd.DataFrame, *,
             create table if needed
             if record exists: update
             else: insert
-    use_index: default True; if True, use the index as pk in table, else use an automatic integer index
     strict: default False; if True, fail instead of coercing anything
     """
     ##########################################
@@ -222,21 +221,18 @@ def to_sql(df: pd.DataFrame, *,
     elif how == 'upsert':
         for i in df.index:
             # check index uniqueness by attempting insert; if it fails, update
-            try:
-                with engine.begin() as con:
+            with engine.begin() as con:
+                try:
                     row = df.loc[i]
-                    row[row.isna()] = None
+                    row.loc[row.isna()] = None
                     values = row.to_dict()
                     values[df.index.name] = i  # set index column to i
                     insert = table.insert().values(values)
                     con.execute(insert)
 
-            except IntegrityError:
-                print('Upsert: Integrity Error on insert => do update')
-
-                with engine.begin() as con:
+                except IntegrityError:
                     row = df.loc[i]
-                    row[row.isna()] = None
+                    row.loc[row.isna()] = None
                     upsert = table.update() \
                         .where(table.c[df.index.name] == i) \
                         .values(row.to_dict())
