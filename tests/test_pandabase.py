@@ -20,7 +20,10 @@ from sqlalchemy import Integer, String, Float, DateTime, Boolean
 import os
 import logging
 
-TABLE_NAME = 'preloaded'
+pd.set_option('display.max_colwidth', 8)
+
+TABLE_NAME = 'pre_loaded_table'
+INDEX_NAME = 'user_integer_index'
 TEST_LOG = os.path.join('tests', 'test_log.log')
 # rewrite logfile following each test
 logging.basicConfig(level=logging.DEBUG, filename=TEST_LOG, filemode='w')
@@ -75,14 +78,16 @@ def simple_df():
     rows = 10
     df = pd.DataFrame(columns=['date', 'integer', 'float', 'string', 'boolean', 'nan'],
                       index=range(rows),)
-    df.index.name = 'arbitrary_index'
+    df.index.name = INDEX_NAME
 
     df.date = pd.date_range(pd.to_datetime('2001-01-01 12:00am', utc=True), periods=10, freq='d')
-    df.integer = range(rows)
+    df.integer = range(1, rows+1)
     df.float = [float(i) / 10 for i in range(10)]
     df.string = list('panda_base')
     df.boolean = [True, False] * 5
     df.nan = [None] * 10
+
+    print(df)
 
     return df
 
@@ -93,7 +98,7 @@ def simple_df2():
     rows = 10
     df = pd.DataFrame(columns=['date', 'integer', 'float', 'string', 'boolean', 'nan'],
                       index=range(rows),)
-    df.index.name = 'arbitrary_index'
+    df.index.name = INDEX_NAME
 
     df.date = pd.date_range(pd.to_datetime('2006-01-01 12:00am', utc=True), periods=10, freq='d')
     df.integer = range(17, 27)
@@ -166,11 +171,12 @@ def test_create_table(session_db, simple_df):
                       table_name='sample',
                       con=session_db,
                       how='fail')
-    assert table.columns['arbitrary_index'].primary_key
-    assert pb.has_table(session_db, 'sample')
+
+    print(table.columns)
+    assert table.columns[INDEX_NAME].primary_key
 
     loaded = pb.read_sql('sample', con=session_db)
-    # print(loaded)
+    print(loaded)
     assert pb.companda(loaded, simple_df, ignore_nan=True)
     assert pb.has_table(session_db, 'sample')
 
@@ -180,19 +186,6 @@ def test_read_table(full_db, simple_df):
 
     df = pb.read_sql(TABLE_NAME, full_db)
 
-    orig_dict = make_clean_columns_dict(simple_df)
-    df_dict = make_clean_columns_dict(df)
-    for key in orig_dict.keys():
-        if key == 'nan':
-            # column of all NaN values is skipped
-            continue
-        assert orig_dict[key] == df_dict[key]
-
-
-def test_read_written_table(session_db, simple_df):
-    assert has_table(session_db, 'sample')
-
-    df = pb.read_sql('sample', session_db)
     orig_dict = make_clean_columns_dict(simple_df)
     df_dict = make_clean_columns_dict(df)
     for key in orig_dict.keys():
@@ -236,58 +229,66 @@ def test_create_table_with_index(session_db, simple_df, table_name, index_col_na
 
 
 def test_upsert_complete_rows(full_db):
-    table_name = TABLE_NAME
-    assert pb.has_table(full_db, table_name)
-    df = pb.read_sql(table_name, con=full_db)
+    assert pb.has_table(full_db, TABLE_NAME)
+    df = pb.read_sql(TABLE_NAME, con=full_db)
+    print('\nloaded pre-change:')
+    print(df)
+    print(df.dtypes)
 
-    df.loc[1, 'float'] = 999
+    df.loc[1, 'float'] = 9.9
 
     pb.to_sql(df,
-              table_name=table_name,
+              table_name=TABLE_NAME,
               con=full_db,
               how='upsert')
 
-    loaded = pb.read_sql(table_name, con=full_db)
+    loaded = pb.read_sql(TABLE_NAME, con=full_db)
+    print('loaded post-upsert by pandabase:')
+    print(loaded)
 
-    assert loaded.loc[1, 'float'] == 999
+    assert loaded.loc[1, 'float'] == 9.9
+    assert loaded.loc[1, 'integer'] == 9.9
     assert loaded.isna().sum().sum() == 0
 
+    loaded_pd = pd.read_sql(TABLE_NAME, con=full_db)
+    loaded_pd.index = loaded_pd.integer
+    loaded_pd = loaded_pd.drop(['integer'], axis=1)
+    assert loaded_pd.loc[1, 'float'] is None
 
-def test_upsert_incomplete_rows(session_db):
+
+def test_upsert_incomplete_rows(full_db):
     """test upsert on partial records"""
-    table_name = 'integer_index'
-    assert pb.has_table(session_db, table_name)
-    df = pb.read_sql(table_name, con=session_db)
+    assert pb.has_table(full_db, TABLE_NAME)
+    df = pb.read_sql(TABLE_NAME, con=full_db)
 
     df.loc[1, 'float'] = 999
     df.loc[12, 'string'] = 'fitty'
     df.loc[111, 'float'] = 9999
 
     pb.to_sql(df,
-              table_name=table_name,
-              con=session_db,
+              table_name=TABLE_NAME,
+              con=full_db,
               how='upsert')
 
-    loaded_pd = pd.read_sql(table_name, con=session_db)
-    print(loaded_pd)
-    print(loaded_pd.dtypes)
-    print('above: pandas    / below: pandabase')
-
-    loaded = pb.read_sql(table_name, con=session_db)
-    print(loaded.dtypes)
-    print(loaded)
+    loaded = pb.read_sql(TABLE_NAME, con=full_db)
     assert loaded.loc[1, 'float'] == 999
     assert loaded.loc[111, 'float'] == 9999
     assert loaded.loc[12, 'string'] == 'fitty'
-    assert loaded_pd.loc[loaded_pd.integer == 111, 'string'].values[0] is None
     assert loaded.loc[111, 'string'] is None
+
+    loaded_pd = pd.read_sql(TABLE_NAME, con=full_db)
+    loaded_pd.index = loaded_pd.integer
+    loaded_pd = loaded_pd.drop(['integer'], axis=1)
+    assert loaded_pd.loc[111, 'float'] == 9999
+    assert loaded_pd.loc[111, 'string'] is None
+    assert loaded_pd.loc[111, 'date'] is None
 
 
 def test_upsert_valid_float(full_db):
     assert pb.has_table(full_db, TABLE_NAME)
 
     df = pd.DataFrame(index=[1], columns=['float'], data=[[1.666]])
-    df.index.name = 'arbitrary_index'
+    df.index.name = INDEX_NAME
 
     pb.to_sql(df,
               table_name=TABLE_NAME,

@@ -151,8 +151,6 @@ def to_sql(df: pd.DataFrame, *,
                 first check if value is None, 
                 then insert
             """
-            mask = df.isna()
-
             db_pandas_dtype = get_column_dtype(col, pd_or_sqla='pd')
             if is_datetime64_any_dtype(db_pandas_dtype):
                 df[name] = pd.to_datetime(df[name].values, utc=True)
@@ -160,11 +158,14 @@ def to_sql(df: pd.DataFrame, *,
                     is_integer_dtype(df_col_info['dtype']) and is_float_dtype(db_pandas_dtype)) or (
                     is_float_dtype(df_col_info['dtype']) and is_integer_dtype(db_pandas_dtype)
             ):
+                print(f'NUMERIC: converting df[{name} from {df[name].dtype} to {db_pandas_dtype}')
                 df[name] = df[name].astype(db_pandas_dtype)
-                df[mask][name] = None
+                print(f'new dtypes: {df.dtypes}')
+                # TODO: explicitly deal with None vs. arbitrary integer
+                df[name] = df[name].fillna(-9999).astype(db_pandas_dtype)
             elif is_string_dtype(df_col_info['dtype']):
-                df[name] = df[name].astype(db_pandas_dtype)
-                df[mask][name] = None
+                print(f'STRING: converting df[{name} from {df[name].dtype} to {db_pandas_dtype}')
+                df[name] = df[name].fillna(-9999).astype(db_pandas_dtype)
             else:
                 raise ValueError(
                     f'Inconsistent type for col: {name}.  '
@@ -213,9 +214,7 @@ def to_sql(df: pd.DataFrame, *,
             rows = []
             for index, row in df.iterrows():
                 # append row
-                rows.append(row.to_dict())
-                # add index name to row
-                rows[-1][df.index.name] = index
+                rows.append({**row.to_dict(), df.index.name: index})
             con.execute(table.insert(), rows)
 
     elif how == 'upsert':
@@ -224,15 +223,14 @@ def to_sql(df: pd.DataFrame, *,
             with engine.begin() as con:
                 try:
                     row = df.loc[i]
-                    row.loc[row.isna()] = None
-                    values = row.to_dict()
-                    values[df.index.name] = i  # set index column to i
+                    row[row.isna()] = None
+                    values = {**row.to_dict(), df.index.name: i}
                     insert = table.insert().values(values)
                     con.execute(insert)
 
                 except IntegrityError:
                     row = df.loc[i]
-                    row.loc[row.isna()] = None
+                    row[row.isna()] = None
                     upsert = table.update() \
                         .where(table.c[df.index.name] == i) \
                         .values(row.to_dict())
@@ -242,8 +240,7 @@ def to_sql(df: pd.DataFrame, *,
 
 
 def read_sql(table_name: str,
-             con: str or sqa.engine,
-             columns=None):
+             con: str or sqa.engine):
     """
     Convenience wrapper around pd.read_sql_query
 
@@ -252,7 +249,6 @@ def read_sql(table_name: str,
     TODO: add range limit parameters
     :param table_name: str
     :param con: db connectable
-    :param columns: list (default None => select all columns)
     """
     engine = engine_builder(con)
     meta = sqa.MetaData(bind=engine)
@@ -260,17 +256,6 @@ def read_sql(table_name: str,
 
     # find index column, dtypes
     index_col = None
-
-    # make selector from columns, or select whole table
-    if columns is None:
-        s = sqa.select([table])
-    else:
-        if index_col not in columns:
-            raise NameError(f'User supplied columns do not include index col: {index_col}')
-        selector = []
-        for col in columns:
-            selector.append(table.c[col])
-        s = sqa.select(selector)
 
     datetime_cols = []
     other_cols = {}
@@ -288,12 +273,10 @@ def read_sql(table_name: str,
         else:
             other_cols[col.name] = dtype
 
-    df = pd.read_sql_query(s, engine, index_col=index_col)
-    # mask = df.isna()
+    df = pd.read_sql_query(sqa.select([table]), engine, index_col=index_col)
 
     for name in datetime_cols:
         df[name] = pd.to_datetime(df[name].values, utc=True)
-        # df[mask][name] = pd.NaT
 
     if datetime_index:
         index = pd.to_datetime(df.index.values, utc=True)
