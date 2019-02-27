@@ -130,14 +130,12 @@ def test_get_sql_dtype_df(simple_df):
     # assert is_integer_dtype(df.integer)
     # assert not is_float_dtype(df.integer)
     assert get_column_dtype(df.integer, 'sqla') == Integer
-    assert get_column_dtype(df.integer, 'pd') == np.int64
+    assert get_column_dtype(df.integer, 'pd') == pd.Int64Dtype()
 
     assert is_float_dtype(df.float)
     assert not is_integer_dtype(df.float)
     assert get_column_dtype(df.float, 'sqla') == Float
 
-    assert not is_integer_dtype(df.string) and not is_float_dtype(df.string) and \
-        not is_datetime64_any_dtype(df.string) and not is_bool_dtype(df.string)
     assert get_column_dtype(df.string, 'sqla') == String
 
     assert is_bool_dtype(df.boolean)
@@ -228,6 +226,71 @@ def test_create_table_with_index(session_db, simple_df, table_name, index_col_na
         raise ValueError(c.msg)
 
 
+def test_append_new_rows(full_db, simple_df):
+    assert pb.has_table(full_db, TABLE_NAME)
+
+    simple_df.index = simple_df.index + 100
+    print(simple_df)
+
+    pb.to_sql(simple_df,
+              table_name=TABLE_NAME,
+              con=full_db,
+              how='append')
+
+    loaded = pb.read_sql(TABLE_NAME, con=full_db)
+    print('loaded post-upsert by pandabase:')
+    print(loaded)
+
+    assert loaded.loc[101, 'float'] == loaded.loc[1, 'float']
+    assert loaded.loc[101, 'float'] == .1
+
+    assert loaded.loc[1, 'integer'] == 2
+    assert loaded.loc[101, 'integer'] == 2
+
+    assert loaded.loc[1, 'string'] == 'a'
+    assert loaded.loc[101, 'string'] == 'a'
+
+    assert loaded.loc[0, 'boolean']
+    assert not loaded.loc[109, 'boolean']
+
+    assert isinstance(loaded.loc[0, 'date'], pd.datetime)
+
+    assert loaded.isna().sum().sum() == 0
+
+
+def test_upsert_new_rows(full_db, simple_df):
+    assert pb.has_table(full_db, TABLE_NAME)
+
+    simple_df.index = simple_df.index + 100
+    print(simple_df)
+
+    pb.to_sql(simple_df,
+              table_name=TABLE_NAME,
+              con=full_db,
+              how='upsert')
+
+    loaded = pb.read_sql(TABLE_NAME, con=full_db)
+    print('loaded post-upsert by pandabase:')
+    print(loaded)
+
+    assert loaded.loc[1, 'float'] == .1
+    assert loaded.loc[101, 'float'] == .1
+
+    assert loaded.loc[1, 'integer'] == 2
+    assert loaded.loc[101, 'integer'] == 2
+
+    assert loaded.loc[1, 'string'] == 'a'
+    assert loaded.loc[101, 'string'] == 'a'
+
+    assert not loaded.loc[1, 'boolean']
+    assert loaded.loc[102, 'boolean']
+
+    assert isinstance(loaded.loc[0, 'date'], pd.datetime)
+    assert loaded.loc[0, 'date'] == loaded.loc[100, 'date']
+
+    assert loaded.isna().sum().sum() == 0
+
+
 def test_upsert_complete_rows(full_db):
     assert pb.has_table(full_db, TABLE_NAME)
     df = pb.read_sql(TABLE_NAME, con=full_db)
@@ -235,6 +298,7 @@ def test_upsert_complete_rows(full_db):
     print(df)
     print(df.dtypes)
 
+    assert df.loc[1, 'float'] == 0.1
     df.loc[1, 'float'] = 9.9
 
     pb.to_sql(df,
@@ -247,13 +311,13 @@ def test_upsert_complete_rows(full_db):
     print(loaded)
 
     assert loaded.loc[1, 'float'] == 9.9
-    assert loaded.loc[1, 'integer'] == 9.9
+    assert loaded.loc[1, 'integer'] == 2
     assert loaded.isna().sum().sum() == 0
 
     loaded_pd = pd.read_sql(TABLE_NAME, con=full_db)
-    loaded_pd.index = loaded_pd.integer
-    loaded_pd = loaded_pd.drop(['integer'], axis=1)
-    assert loaded_pd.loc[1, 'float'] is None
+    loaded_pd.index = loaded_pd[INDEX_NAME]
+    loaded_pd = loaded_pd.drop([INDEX_NAME], axis=1)
+    assert loaded_pd.loc[1, 'float'] == 9.9
 
 
 def test_upsert_incomplete_rows(full_db):
@@ -261,9 +325,12 @@ def test_upsert_incomplete_rows(full_db):
     assert pb.has_table(full_db, TABLE_NAME)
     df = pb.read_sql(TABLE_NAME, con=full_db)
 
-    df.loc[1, 'float'] = 999
+    df.loc[1, 'float'] = 9.9
+    df.loc[4, 'integer'] = 66
     df.loc[12, 'string'] = 'fitty'
-    df.loc[111, 'float'] = 9999
+    df.loc[111, 'float'] = 7.7
+    print('altered df:')
+    print(df)
 
     pb.to_sql(df,
               table_name=TABLE_NAME,
@@ -271,17 +338,24 @@ def test_upsert_incomplete_rows(full_db):
               how='upsert')
 
     loaded = pb.read_sql(TABLE_NAME, con=full_db)
-    assert loaded.loc[1, 'float'] == 999
-    assert loaded.loc[111, 'float'] == 9999
+    print(loaded)
+
+    assert loaded.loc[1, 'float'] == 9.9
+    assert loaded.loc[4, 'integer'] == 66
+    assert loaded.loc[111, 'float'] == 7.7
     assert loaded.loc[12, 'string'] == 'fitty'
     assert loaded.loc[111, 'string'] is None
+    assert pd.np.isnan(loaded.loc[111, 'integer'])
+    assert loaded.loc[111, 'date'] is pd.NaT
+    assert loaded.loc[111, 'boolean'] is None
 
     loaded_pd = pd.read_sql(TABLE_NAME, con=full_db)
-    loaded_pd.index = loaded_pd.integer
-    loaded_pd = loaded_pd.drop(['integer'], axis=1)
-    assert loaded_pd.loc[111, 'float'] == 9999
+    loaded_pd.index = loaded_pd[INDEX_NAME]
+    loaded_pd = loaded_pd.drop([INDEX_NAME], axis=1)
+    assert loaded_pd.loc[111, 'float'] == 7.7
     assert loaded_pd.loc[111, 'string'] is None
-    assert loaded_pd.loc[111, 'date'] is None
+    assert loaded_pd.loc[111, 'date'] is pd.NaT
+    assert pd.np.isnan(loaded_pd.loc[111, 'integer'])
 
 
 def test_upsert_valid_float(full_db):

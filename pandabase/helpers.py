@@ -87,7 +87,7 @@ def get_column_dtype(column, pd_or_sqla):
     elif pd_or_sqla == 'sqla':
         return t
     elif pd_or_sqla == 'pd':
-        lookup = {Integer: np.int64,
+        lookup = {Integer: pd.Int64Dtype(),
                   Float: np.float64,
                   DateTime: np.datetime64,
                   Boolean: np.bool_,

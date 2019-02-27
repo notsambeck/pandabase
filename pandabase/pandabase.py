@@ -66,6 +66,7 @@ def to_sql(df: pd.DataFrame, *,
     ##########################################
     # 1. make connection objects; validate inputs
     df = df.copy()
+
     engine = engine_builder(con)
     meta = sqa.MetaData()
 
@@ -125,9 +126,6 @@ def to_sql(df: pd.DataFrame, *,
             raise ValueError(f'Inconsistent pk for col: {name}! db: {col.primary_key} / '
                              f'df: {df_col_info["pk"]}')
 
-        if df_col_info['dtype'] is None:
-            df_col_info['dtype'] = get_column_dtype(col, pd_or_sqla='pd')
-
         db_sqla_dtype = get_column_dtype(col, pd_or_sqla='sqla')
 
         # COERCE BAD DATATYPES
@@ -164,8 +162,9 @@ def to_sql(df: pd.DataFrame, *,
                 # TODO: explicitly deal with None vs. arbitrary integer
                 df[name] = df[name].fillna(-9999).astype(db_pandas_dtype)
             elif is_string_dtype(df_col_info['dtype']):
-                print(f'STRING: converting df[{name} from {df[name].dtype} to {db_pandas_dtype}')
-                df[name] = df[name].fillna(-9999).astype(db_pandas_dtype)
+                print(f'STRING: NOT converting df[{name} from {df[name].dtype} to {db_pandas_dtype}')
+                # TODO
+                # df[name] = df[name].astype(db_pandas_dtype)
             else:
                 raise ValueError(
                     f'Inconsistent type for col: {name}.  '
@@ -184,6 +183,8 @@ def to_sql(df: pd.DataFrame, *,
         new_column_warning = f' Table[{table_name}]:' + \
                              f' new Series [{col_names_string}] added around index {df.index[0]}'
         if strict:
+            raise ValueError(new_column_warning)
+        else:
             logging.warning(new_column_warning)
 
         for new_col in new_cols:
@@ -209,7 +210,7 @@ def to_sql(df: pd.DataFrame, *,
     # FINALLY: either insert/fail, append/fail, or upsert
 
     if how in ['append', 'fail']:
-        # raise if repeated index
+        # will raise IntegrityError if repeated index encountered
         with engine.begin() as con:
             rows = []
             for index, row in df.iterrows():
@@ -218,22 +219,19 @@ def to_sql(df: pd.DataFrame, *,
             con.execute(table.insert(), rows)
 
     elif how == 'upsert':
-        for i in df.index:
+        for index, row in df.iterrows():
             # check index uniqueness by attempting insert; if it fails, update
             with engine.begin() as con:
+                row[row.isna()] = None
+                row = {**row.to_dict(), df.index.name: index}
                 try:
-                    row = df.loc[i]
-                    row[row.isna()] = None
-                    values = {**row.to_dict(), df.index.name: i}
-                    insert = table.insert().values(values)
+                    insert = table.insert().values(row)
                     con.execute(insert)
 
                 except IntegrityError:
-                    row = df.loc[i]
-                    row[row.isna()] = None
                     upsert = table.update() \
-                        .where(table.c[df.index.name] == i) \
-                        .values(row.to_dict())
+                        .where(table.c[df.index.name] == index) \
+                        .values(row)
                     con.execute(upsert)
 
     return table
