@@ -163,7 +163,7 @@ def to_sql(df: pd.DataFrame, *,
                 df[name] = df[name].fillna(-9999).astype(db_pandas_dtype)
             elif is_string_dtype(df_col_info['dtype']):
                 print(f'STRING: NOT converting df[{name} from {df[name].dtype} to {db_pandas_dtype}')
-                # TODO
+                # TODO - does this need to happen too?
                 # df[name] = df[name].astype(db_pandas_dtype)
             else:
                 raise ValueError(
@@ -283,6 +283,7 @@ def read_sql(table_name: str,
         df[name] = df[name].astype(pd.Int64Dtype())
 
     for name in bool_cols:
+        # TODO figure this out
         pass
         # df[name] = df[name].astype(pd.Int64Dtype())
 
