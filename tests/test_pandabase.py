@@ -8,6 +8,7 @@ import pytest
 
 import pandabase as pb
 from pandabase.helpers import *
+from pandabase.companda import companda
 
 import pandas as pd
 from pandas.api.types import (is_bool_dtype,
@@ -74,6 +75,23 @@ def sample_csv_dfs():
 
 @pytest.fixture(scope='function')
 def simple_df():
+    """make a basic DataFrame with multiple dtypes, integer index"""
+    rows = 6
+    df = pd.DataFrame(columns=['date', 'integer', 'float', 'string', 'boolean'],
+                      index=range(rows),)
+    df.index.name = INDEX_NAME
+
+    df.date = pd.date_range(pd.to_datetime('2001-01-01 12:00am', utc=True), periods=rows, freq='d')
+    df.integer = range(1, rows+1)
+    df.float = [float(i) / 10 for i in range(rows)]
+    df.string = list('panda_base')[:rows]
+    df.boolean = [True, False] * (rows//2)
+
+    return df
+
+
+@pytest.fixture(scope='function')
+def df_with_nan_col():
     """make a dumb DataFrame with multiple dtypes and integer index"""
     rows = 10
     df = pd.DataFrame(columns=['date', 'integer', 'float', 'string', 'boolean', 'nan'],
@@ -117,9 +135,9 @@ def simple_df2():
 # BASIC TESTS #
 
 
-def test_get_sql_dtype_df(simple_df):
+def test_get_sql_dtype_df(df_with_nan_col):
     """test that datatype functions work as expected"""
-    df = simple_df
+    df = df_with_nan_col
 
     assert isinstance(df.index, pd.RangeIndex)
 
@@ -170,11 +188,11 @@ def test_create_table(session_db, simple_df):
                       con=session_db,
                       how='fail')
 
-    print(table.columns)
+    # print(table.columns)
     assert table.columns[INDEX_NAME].primary_key
 
     loaded = pb.read_sql('sample', con=session_db)
-    print(loaded)
+    # print(loaded)
     assert pb.companda(loaded, simple_df, ignore_nan=True)
     assert pb.has_table(session_db, 'sample')
 
@@ -191,6 +209,7 @@ def test_read_table(full_db, simple_df):
             # column of all NaN values is skipped
             continue
         assert orig_dict[key] == df_dict[key]
+    assert companda(df, simple_df)
 
 
 def test_overwrite_table_fails(full_db, simple_df):
@@ -226,80 +245,38 @@ def test_create_table_with_index(session_db, simple_df, table_name, index_col_na
         raise ValueError(c.msg)
 
 
-def test_append_new_rows(full_db, simple_df):
+@pytest.mark.parametrize('how', ['append', 'upsert'])
+def test_add_new_rows(full_db, simple_df, how):
     assert pb.has_table(full_db, TABLE_NAME)
 
-    simple_df.index = simple_df.index + 100
-    print(simple_df)
+    df = simple_df.copy()
+    df.index = df.index + 100
 
-    pb.to_sql(simple_df,
+    pb.to_sql(df,
               table_name=TABLE_NAME,
               con=full_db,
-              how='append')
+              how=how)
 
     loaded = pb.read_sql(TABLE_NAME, con=full_db)
-    print('loaded post-upsert by pandabase:')
-    print(loaded)
-
-    assert loaded.loc[101, 'float'] == loaded.loc[1, 'float']
-    assert loaded.loc[101, 'float'] == .1
-
-    assert loaded.loc[1, 'integer'] == 2
-    assert loaded.loc[101, 'integer'] == 2
-
-    assert loaded.loc[1, 'string'] == 'a'
-    assert loaded.loc[101, 'string'] == 'a'
-
-    assert loaded.loc[0, 'boolean']
-    assert not loaded.loc[109, 'boolean']
-
-    assert isinstance(loaded.loc[0, 'date'], pd.datetime)
+    # print('loaded post-upsert by pandabase:')
+    # print(loaded)
 
     assert loaded.isna().sum().sum() == 0
-
-
-def test_upsert_new_rows(full_db, simple_df):
-    assert pb.has_table(full_db, TABLE_NAME)
-
-    simple_df.index = simple_df.index + 100
-    print(simple_df)
-
-    pb.to_sql(simple_df,
-              table_name=TABLE_NAME,
-              con=full_db,
-              how='upsert')
-
-    loaded = pb.read_sql(TABLE_NAME, con=full_db)
-    print('loaded post-upsert by pandabase:')
-    print(loaded)
-
-    assert loaded.loc[1, 'float'] == .1
-    assert loaded.loc[101, 'float'] == .1
-
-    assert loaded.loc[1, 'integer'] == 2
-    assert loaded.loc[101, 'integer'] == 2
-
-    assert loaded.loc[1, 'string'] == 'a'
-    assert loaded.loc[101, 'string'] == 'a'
-
-    assert not loaded.loc[1, 'boolean']
-    assert loaded.loc[102, 'boolean']
-
-    assert isinstance(loaded.loc[0, 'date'], pd.datetime)
-    assert loaded.loc[0, 'date'] == loaded.loc[100, 'date']
-
-    assert loaded.isna().sum().sum() == 0
+    assert companda(simple_df, loaded.loc[simple_df.index])
+    assert companda(df, loaded.loc[df.index])
 
 
 def test_upsert_complete_rows(full_db):
     assert pb.has_table(full_db, TABLE_NAME)
     df = pb.read_sql(TABLE_NAME, con=full_db)
-    print('\nloaded pre-change:')
-    print(df)
-    print(df.dtypes)
 
-    assert df.loc[1, 'float'] == 0.1
     df.loc[1, 'float'] = 9.9
+    df.loc[2, 'integer'] = 999
+    df.loc[3, 'string'] = 'nah'
+    df.loc[4, 'date'] = pd.to_datetime('1968-01-01', utc=True)
+
+    # check that these values still exist
+    assert df.loc[1, 'integer'] == 2
 
     pb.to_sql(df,
               table_name=TABLE_NAME,
@@ -307,30 +284,29 @@ def test_upsert_complete_rows(full_db):
               how='upsert')
 
     loaded = pb.read_sql(TABLE_NAME, con=full_db)
-    print('loaded post-upsert by pandabase:')
-    print(loaded)
+    assert companda(df, loaded)
 
-    assert loaded.loc[1, 'float'] == 9.9
-    assert loaded.loc[1, 'integer'] == 2
-    assert loaded.isna().sum().sum() == 0
-
-    loaded_pd = pd.read_sql(TABLE_NAME, con=full_db)
-    loaded_pd.index = loaded_pd[INDEX_NAME]
-    loaded_pd = loaded_pd.drop([INDEX_NAME], axis=1)
-    assert loaded_pd.loc[1, 'float'] == 9.9
+    loaded_pd = pd.read_sql(TABLE_NAME, con=full_db, index_col=INDEX_NAME)
+    assert companda(df, loaded_pd)
 
 
-def test_upsert_incomplete_rows(full_db):
-    """test upsert on partial records"""
+def test_upsert_inomplete_rows(full_db):
     assert pb.has_table(full_db, TABLE_NAME)
     df = pb.read_sql(TABLE_NAME, con=full_db)
+    types = df.dtypes
 
-    df.loc[1, 'float'] = 9.9
-    df.loc[4, 'integer'] = 66
-    df.loc[12, 'string'] = 'fitty'
-    df.loc[111, 'float'] = 7.7
-    print('altered df:')
-    print(df)
+    df.loc[11, 'float'] = 9.9
+    df.loc[12, 'integer'] = 999
+    df.loc[13, 'string'] = 'nah'
+    df.loc[14, 'date'] = pd.to_datetime('1968-01-01', utc=True)
+
+    for col in df.columns:
+        print(col)
+        assert types[col] == df.dtypes[col]
+
+    # check that these values still exist
+    assert df.loc[1, 'integer'] == 2
+    assert pd.isna(df.loc[11, 'integer'])
 
     pb.to_sql(df,
               table_name=TABLE_NAME,
@@ -338,24 +314,10 @@ def test_upsert_incomplete_rows(full_db):
               how='upsert')
 
     loaded = pb.read_sql(TABLE_NAME, con=full_db)
-    print(loaded)
+    assert companda(df, loaded)
 
-    assert loaded.loc[1, 'float'] == 9.9
-    assert loaded.loc[4, 'integer'] == 66
-    assert loaded.loc[111, 'float'] == 7.7
-    assert loaded.loc[12, 'string'] == 'fitty'
-    assert loaded.loc[111, 'string'] is None
-    assert pd.np.isnan(loaded.loc[111, 'integer'])
-    assert loaded.loc[111, 'date'] is pd.NaT
-    assert loaded.loc[111, 'boolean'] is None
-
-    loaded_pd = pd.read_sql(TABLE_NAME, con=full_db)
-    loaded_pd.index = loaded_pd[INDEX_NAME]
-    loaded_pd = loaded_pd.drop([INDEX_NAME], axis=1)
-    assert loaded_pd.loc[111, 'float'] == 7.7
-    assert loaded_pd.loc[111, 'string'] is None
-    assert loaded_pd.loc[111, 'date'] is pd.NaT
-    assert pd.np.isnan(loaded_pd.loc[111, 'integer'])
+    loaded_pd = pd.read_sql(TABLE_NAME, con=full_db, index_col=INDEX_NAME)
+    assert companda(df, loaded_pd)
 
 
 def test_upsert_valid_float(full_db):

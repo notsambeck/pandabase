@@ -256,7 +256,8 @@ def read_sql(table_name: str,
     index_col = None
 
     datetime_cols = []
-    other_cols = {}
+    integer_cols = []
+    bool_cols = []
     datetime_index = False
 
     for col in table.columns:
@@ -268,17 +269,25 @@ def read_sql(table_name: str,
 
         if is_datetime64_any_dtype(dtype):
             datetime_cols.append(col.name)
-        else:
-            other_cols[col.name] = dtype
+        elif is_integer_dtype(dtype):
+            integer_cols.append(col.name)
+        elif is_bool_dtype(dtype):
+            bool_cols.append(col.name)
 
     df = pd.read_sql_query(sqa.select([table]), engine, index_col=index_col)
 
     for name in datetime_cols:
         df[name] = pd.to_datetime(df[name].values, utc=True)
 
+    for name in integer_cols:
+        df[name] = df[name].astype(pd.Int64Dtype())
+
+    for name in bool_cols:
+        pass
+        # df[name] = df[name].astype(pd.Int64Dtype())
+
     if datetime_index:
-        index = pd.to_datetime(df.index.values, utc=True)
-        df.index = index
+        df.index = pd.to_datetime(df.index.values, utc=True)
         df.index.name = index_col
 
     return df
