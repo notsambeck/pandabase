@@ -14,7 +14,9 @@ import pandas as pd
 from pandas.api.types import (is_bool_dtype,
                               is_datetime64_any_dtype,
                               is_integer_dtype,
-                              is_float_dtype)
+                              is_float_dtype,
+                              is_object_dtype,
+                              )
 
 from sqlalchemy import Integer, String, Float, DateTime, Boolean
 from sqlalchemy.exc import IntegrityError
@@ -176,6 +178,27 @@ def test_get_sql_dtype_db(simple_df, empty_db):
             assert get_column_dtype(col, 'sqla') == get_column_dtype(df.index, 'sqla')
             continue
         assert get_column_dtype(col, 'sqla') == get_column_dtype(df[col.name], 'sqla')
+
+
+@pytest.mark.parametrize('series, expected', [
+    [pd.Series([True, False, True, ], dtype=int), True],
+    [pd.Series([True, False, True, ], dtype=float), True],
+    [pd.Series([True, False, None, ], dtype=pd.Int64Dtype), True],
+    [pd.Series([True, False, None, ], dtype=float), True],
+    [pd.Series([True, False, True, ]), True],
+    [pd.Series([True, False, None, ]), True],
+    [pd.Series([True, False, 4.4, ]), False],
+    [pd.Series([True, False, 1.0, ]), True],
+    [pd.Series([True, False, 0, ]), True],
+    [pd.Series([1, 0, 0, ]), True],
+    [pd.Series([1, 0, None, ]), True],
+    [pd.Series([None, None, None, ]), True],
+    [pd.Series([0, 1, 2, ]), False],
+])
+def test_series_is_boolean(series, expected):
+    assert isinstance(series, pd.Series)
+    print(series)
+    assert series_is_boolean(series) == expected
 
 
 def test_read_table(full_db, simple_df):

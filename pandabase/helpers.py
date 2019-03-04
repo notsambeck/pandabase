@@ -3,12 +3,42 @@ import numpy as np
 from pandas.api.types import (is_bool_dtype,
                               is_datetime64_any_dtype,
                               is_integer_dtype,
-                              is_float_dtype, )
+                              is_float_dtype,
+                              is_object_dtype,
+                              )
 
 import sqlalchemy as sqa
 from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean
 
 PANDABASE_DEFAULT_INDEX = 'pandabase_index'
+
+
+def series_is_boolean(col):
+    """return True if a pd.Series only contains True, False, and None; otherwise return False"""
+    if not isinstance(col, pd.Series):
+        raise TypeError(f'series_is_boolean takes a pd.Series; got {col}::{type(col)} instead')
+    elif is_bool_dtype(col):
+        return True
+    elif is_object_dtype(col):
+        for val in col.unique():
+            if val not in [True, False, None]:
+                return False
+        return True
+    elif is_integer_dtype(col):
+        for val in col.unique():
+            if pd.isna(val):
+                continue
+            if val not in [1, 0]:
+                return False
+        return True
+    elif is_float_dtype(col):
+        for val in col.unique():
+            if pd.isna(val):
+                continue
+            if val not in [1, 0]:
+                return False
+        return True
+    return False
 
 
 def engine_builder(con):
