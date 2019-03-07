@@ -240,9 +240,7 @@ def to_sql(df: pd.DataFrame, *,
 def read_sql(table_name: str,
              con: str or sqa.engine, ):
     """
-    Convenience wrapper around pd.read_sql_query
-
-    Reflect metadata; get Table or Table[columns]
+    Read in a table from con as a pd.DataFrame, preserving dtypes and primary keys
 
     TODO: add range limit parameters
     :param table_name: str
@@ -252,53 +250,37 @@ def read_sql(table_name: str,
     meta = sqa.MetaData(bind=engine)
     table = Table(table_name, meta, autoload=True, autoload_with=engine)
 
-    # find index column, dtypes
-    index_col = None
+    if len(table.primary_key.columns) != 1:
+        raise NotImplementedError('Pandabase is not compatible with multi-index tables')
 
-    datetime_cols = []
-    integer_cols = []
-    object_cols = []
-    bool_cols = []
-    datetime_index = False
+    result = con.execute(table.select())
+
+    data = result.fetchall()
+    df = pd.DataFrame.from_records(data, columns=[col.name for col in table.columns],
+                                   coerce_float=True)
 
     for col in table.columns:
         dtype = get_column_dtype(col, pd_or_sqla='pd')
+
+        # force all dates to utc
+        if is_datetime64_any_dtype(dtype):
+            df[col.name] = pd.to_datetime(df[col.name].values, utc=True)
+
+        # deal with primary key first; never convert primary key to nullable
         if col.primary_key:
-            index_col = col.name
-            datetime_index = is_datetime64_any_dtype(dtype)
+            df.index = df[col.name]
+            df.index.name = col.name
+            df = df.drop(columns=[col.name])
             continue
 
-        if is_datetime64_any_dtype(dtype):
-            datetime_cols.append(col.name)
-        elif is_bool_dtype(dtype):
-            bool_cols.append(col.name)
+        if is_bool_dtype(dtype):
+            pass
+            # df[col.name] = df[col.name].astype(pd.Int64Dtype())
         elif is_integer_dtype(dtype):
-            integer_cols.append(col.name)
+            df[col.name] = df[col.name].astype(pd.Int64Dtype())
         elif is_float_dtype(dtype):
             pass
         elif is_string_dtype(col):
-            object_cols.append(col.name)
-
-    # df = pd.read_sql_query(sqa.select([table]), engine, index_col=index_col)
-    sql_select = table.select()
-    result = con.execute(sql_select)
-
-    data = result.fetchall()
-    df = pd.DataFrame.from_records(data, columns=table.columns, coerce_float=True)
-
-    for name in datetime_cols:
-        df[name] = pd.to_datetime(df[name].values, utc=True)
-
-    for name in integer_cols:
-        df[name] = df[name].astype(pd.Int64Dtype())
-
-    for name in bool_cols:
-        # TODO figure this out
-        pass
-        # df[name] = df[name].astype(pd.Int64Dtype())
-
-    if datetime_index:
-        df.index = pd.to_datetime(df.index.values, utc=True)
-        df.index.name = index_col
+            pass
 
     return df

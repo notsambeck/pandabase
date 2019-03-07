@@ -18,6 +18,8 @@ from pandas.api.types import (is_bool_dtype,
                               is_object_dtype,
                               )
 
+from pytz import UTC
+
 from sqlalchemy import Integer, String, Float, DateTime, Boolean
 from sqlalchemy.exc import IntegrityError
 
@@ -84,11 +86,13 @@ def simple_df():
                       index=range(rows),)
     df.index.name = INDEX_NAME
 
-    df.date = pd.date_range(pd.to_datetime('2001-01-01 12:00am', utc=True), periods=rows, freq='d')
+    df.date = pd.date_range(pd.to_datetime('2001-01-01 12:00am', utc=True), periods=rows, freq='d', tz=UTC)
     df.integer = range(1, rows+1)
     df.float = [float(i) / 10 for i in range(rows)]
     df.string = list('panda_base')[:rows]
     df.boolean = [True, False] * (rows//2)
+
+    assert df.date[0].tzinfo is not None
 
     return df
 
@@ -210,6 +214,7 @@ def test_read_table(full_db, simple_df):
     orig_dict = make_clean_columns_dict(simple_df)
     df_dict = make_clean_columns_dict(df)
     for key in orig_dict.keys():
+        print(key)
         if key == 'nan':
             # column of all NaN values is skipped
             continue
