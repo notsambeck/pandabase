@@ -238,7 +238,7 @@ def to_sql(df: pd.DataFrame, *,
 
 
 def read_sql(table_name: str,
-             con: str or sqa.engine):
+             con: str or sqa.engine, ):
     """
     Convenience wrapper around pd.read_sql_query
 
@@ -257,6 +257,7 @@ def read_sql(table_name: str,
 
     datetime_cols = []
     integer_cols = []
+    object_cols = []
     bool_cols = []
     datetime_index = False
 
@@ -269,51 +270,21 @@ def read_sql(table_name: str,
 
         if is_datetime64_any_dtype(dtype):
             datetime_cols.append(col.name)
-        elif is_integer_dtype(dtype):
-            integer_cols.append(col.name)
         elif is_bool_dtype(dtype):
             bool_cols.append(col.name)
+        elif is_integer_dtype(dtype):
+            integer_cols.append(col.name)
+        elif is_float_dtype(dtype):
+            pass
+        elif is_string_dtype(col):
+            object_cols.append(col.name)
 
-    df = pd.read_sql_query(sqa.select([table]), engine, index_col=index_col)
+    # df = pd.read_sql_query(sqa.select([table]), engine, index_col=index_col)
+    sql_select = table.select()
+    result = con.execute(sql_select)
 
-    """
-    From pd.sql.Table:
-    
-    def read(self, coerce_float=True, parse_dates=None, columns=None,
-             chunksize=None):
-
-# get select statement
-        
-        if columns is not None and len(columns) > 0:
-            from sqlalchemy import select
-            cols = [self.table.c[n] for n in columns]
-            if self.index is not None:
-                [cols.insert(0, self.table.c[idx]) for idx in self.index[::-1]]
-            sql_select = select(cols)
-        else:
-            sql_select = self.table.select()
-
-# execute
-        result = self.pd_sql.execute(sql_select)
-        column_names = result.keys()
-
-# default: None get query_iterator
-        if chunksize is not None:
-            return self._query_iterator(result, chunksize, column_names,
-                                        coerce_float=coerce_float,
-                                        parse_dates=parse_dates)
-        else:
-            data = result.fetchall()
-            self.frame = DataFrame.from_records(
-                data, columns=column_names, coerce_float=coerce_float)
-
-            self._harmonize_columns(parse_dates=parse_dates)
-
-            if self.index is not None:
-                self.frame.set_index(self.index, inplace=True)
-
-            return self.frame
-        """
+    data = result.fetchall()
+    df = pd.DataFrame.from_records(data, columns=table.columns, coerce_float=True)
 
     for name in datetime_cols:
         df[name] = pd.to_datetime(df[name].values, utc=True)
