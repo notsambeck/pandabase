@@ -24,14 +24,7 @@ def series_is_boolean(col):
             if val not in [True, False, None]:
                 return False
         return True
-    elif is_integer_dtype(col):
-        for val in col.unique():
-            if pd.isna(val):
-                continue
-            if val not in [1, 0]:
-                return False
-        return True
-    elif is_float_dtype(col):
+    elif is_integer_dtype(col) or is_float_dtype(col):
         for val in col.unique():
             if pd.isna(val):
                 continue
@@ -51,6 +44,41 @@ def engine_builder(con):
 
     return con
 
+def _get_type_from_df_col(col: pd.Series):
+    """
+    Take a pd.Series, return its SQLAlchemy datatype
+    If it doesn't match anything, return String
+    Args:
+        pd.Series
+    Returns:
+        sqlalchemy Type or None
+        one of {Integer, Float, Boolean, DateTime, String, or None (for all NaN)}
+    """
+    if col.isna().all():
+        return None
+
+    if is_bool_dtype(col):  # or series_is_boolean:
+        return Boolean
+    elif is_integer_dtype(col):
+        return Integer
+    elif is_float_dtype(col):
+        return Float
+    elif is_datetime64_any_dtype(col):
+        return DateTime
+    else:
+        return String
+
+def _get_type_from_db_col(col: sqa.Column):
+    if isinstance(col.type, sqa.types.Integer):
+        return Integer
+    elif isinstance(col.type, sqa.types.Float):
+        return Float
+    elif isinstance(col.type, sqa.types.DateTime):
+        return DateTime
+    elif isinstance(col.type, sqa.types.Boolean):
+        return Boolean
+    else:
+        return String
 
 def get_column_dtype(column, pd_or_sqla):
     """
@@ -68,43 +96,6 @@ def get_column_dtype(column, pd_or_sqla):
             if pd_or_sqla == 'pd':
                 one of {np.int64, np.float64, np.datetime64, np.bool_, np.str_}
     """
-
-    def _get_type_from_df_col(col):
-        """
-        Take a pd.Series or column of DataFrame, return its SQLAlchemy datatype
-        If it doesn't match anything, return String
-        Args:
-            pd.Series
-        Returns:
-            sqlalchemy Type or None
-            one of {Integer, Float, Boolean, DateTime, String, or None (for all NaN)}
-        """
-        if col.isna().all():
-            return None
-
-        if is_bool_dtype(col):
-            return Boolean
-        elif is_integer_dtype(col):
-            return Integer
-        elif is_float_dtype(col):
-            return Float
-        elif is_datetime64_any_dtype(col):
-            return DateTime
-        else:
-            return String
-
-    def _get_type_from_db_col(col):
-        if isinstance(col.type, sqa.types.Integer):
-            return Integer
-        elif isinstance(col.type, sqa.types.Float):
-            return Float
-        elif isinstance(col.type, sqa.types.DateTime):
-            return DateTime
-        elif isinstance(col.type, sqa.types.Boolean):
-            return Boolean
-        else:
-            return String
-
     if isinstance(column, sqa.Column):
         t = _get_type_from_db_col(column)
     elif isinstance(column, (pd.Series, pd.Index)):

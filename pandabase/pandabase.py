@@ -251,7 +251,7 @@ def read_sql(table_name: str,
     table = Table(table_name, meta, autoload=True, autoload_with=engine)
 
     if len(table.primary_key.columns) != 1:
-        raise NotImplementedError('Pandabase is not compatible with multi-index tables')
+        raise NotImplementedError('pandabase is not compatible with multi-index tables')
 
     result = con.execute(table.select())
 

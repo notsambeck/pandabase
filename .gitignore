@@ -1,5 +1,6 @@
-#pycharm
+# editors
 .idea
+.vscode
 
 #log files
 tests/test_log.log
