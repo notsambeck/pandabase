@@ -1,8 +1,11 @@
 """companda compares pandas DataFrames"""
 
 import pandas as pd
-from pandas.api.types import (is_integer_dtype,
-                              is_float_dtype)
+from pandas.api.types import (
+    is_integer_dtype,
+    is_float_dtype,
+    is_datetime64_any_dtype,
+)
 from .helpers import get_column_dtype, PANDABASE_DEFAULT_INDEX
 
 
@@ -40,10 +43,10 @@ def companda(df1: pd.DataFrame, df2: pd.DataFrame, gamma=.0001, ignore_nan=False
         gamma:
         ignore_nan: ignore any all_nan columns
 
-    Returns: truthy Companda iff:
-        1. columns are equal (both subsets of each other)
+    Returns: a truthy Companda object iff:
+        1. columns are equal (i.e. both subsets of each other)
         2. indices are equal
-        3. data is equal within decimal error gamma
+        3. data is equal (within decimal error gamma)
     """
     if ignore_nan:
         df1 = df1.copy()
@@ -99,10 +102,19 @@ def companda(df1: pd.DataFrame, df2: pd.DataFrame, gamma=.0001, ignore_nan=False
                 continue
             else:
                 return Companda(False, f"columns and indices equal; values not almost equal in column {col}.")
+        elif is_datetime64_any_dtype(df1[col]):
+            if pd.np.array_equal(df1[col].isna(), df2[col].isna()) and pd.np.array_equal(df1[col].dropna(),
+                                                                                         df2[col].dropna()):
+                continue
         else:
-            if pd.np.array_equal(df1[col], df2[col]):
+            if pd.np.array_equal(df1[col].isna(), df2[col].isna()) and pd.np.array_equal(df1[col].dropna(), df2[col].dropna()):
                 continue
             else:
-                return Companda(False, f"columns and indices equal; values not equal in column {col}.")
+                print(f'Unequal values follow from {col}')
+                for i in range(len(df1)):
+                    if df1[col].iloc[i] != df2[col].iloc[i]:
+                        print(i, df1[col].iloc[i], df2[col].iloc[i])
+                return Companda(False,
+                                f"columns and indices equal; values not equal in column {col}. {df1[col]} {df2[col]}")
 
     return Companda(True)

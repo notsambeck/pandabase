@@ -156,13 +156,13 @@ def to_sql(df: pd.DataFrame, *,
                     is_integer_dtype(df_col_info['dtype']) and is_float_dtype(db_pandas_dtype)) or (
                     is_float_dtype(df_col_info['dtype']) and is_integer_dtype(db_pandas_dtype)
             ):
-                print(f'NUMERIC: converting df[{name} from {df[name].dtype} to {db_pandas_dtype}')
+                print(f'NUMERIC DTYPE: converting df[{name} from {df[name].dtype} to {db_pandas_dtype}')
                 df[name] = df[name].astype(db_pandas_dtype)
                 print(f'new dtypes: {df.dtypes}')
                 # TODO: explicitly deal with None vs. arbitrary integer
-                df[name] = df[name].fillna(-9999).astype(db_pandas_dtype)
+                # df[name] = df[name].fillna(-9999).astype(db_pandas_dtype)
             elif is_string_dtype(df_col_info['dtype']):
-                print(f'STRING: NOT converting df[{name} from {df[name].dtype} to {db_pandas_dtype}')
+                print(f'STRING DTYPE: NOT converting df[{name}] from {df[name].dtype} to {db_pandas_dtype}')
                 # TODO - does this need to happen too?
                 # df[name] = df[name].astype(db_pandas_dtype)
             else:
@@ -194,17 +194,25 @@ def to_sql(df: pd.DataFrame, *,
 
     df.index.name = clean_name(df.index.name)
 
-    # convert any non-tz-aware datetimes to utc using pd.to_datetime (warn)
+    # convert any non-tz-aware datetimes to UTC using pd.to_datetime (warn)
     for col in df.columns:
-        if is_datetime64_any_dtype(df[col]) and df[col].dt.tz != UTC:
-            if strict:
-                raise ValueError(f'Strict=True; column {col} is tz-naive. Please correct.')
-            else:
-                logging.warning(f'{col} was stored in tz-naive format; automatically converted to UTC')
-            df[col] = pd.to_datetime(df[col].values, utc=True)
+        print(col)
+        if is_datetime64_any_dtype(df[col]):
+            if df[col].dt.tz != UTC:
+                if strict:
+                    raise ValueError(f'Strict=True; column {col} is tz-naive or not UTC. Please correct.')
+                else:
+                    logging.warning(f'{col} was stored in tz-naive format; automatically converted to UTC')
+                    df[col] = pd.to_datetime(df[col].values, utc=True)
 
+            # fill any NaNs with SQL null
+            # df[col] = df[col].fillna(sqa.sql.null())
+
+    print('connect...')
     with engine.begin() as con:
         meta.create_all(bind=con)
+
+    print(df)
 
     ######################################################
     # FINALLY: either insert/fail, append/fail, or upsert
@@ -223,7 +231,9 @@ def to_sql(df: pd.DataFrame, *,
             # check index uniqueness by attempting insert; if it fails, update
             with engine.begin() as con:
                 row[row.isna()] = None
-                row = {**row.to_dict(), df.index.name: index}
+                # row = {**row.fillna(sqa.sql.null()).to_dict(), df.index.name: index}
+                row = {**row.dropna().to_dict(), df.index.name: index}
+                print(row)
                 try:
                     insert = table.insert().values(row)
                     con.execute(insert)

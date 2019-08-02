@@ -1,6 +1,7 @@
 # editors
 .idea
 .vscode
+htmlcov/
 
 #log files
 tests/test_log.log

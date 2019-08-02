@@ -15,7 +15,6 @@ from pandas.api.types import (is_bool_dtype,
                               is_datetime64_any_dtype,
                               is_integer_dtype,
                               is_float_dtype,
-                              is_object_dtype,
                               )
 
 from pytz import UTC
@@ -43,12 +42,14 @@ FILE3 = os.path.join('tests', 'sample_data3.csv')
 @pytest.fixture(scope='function')
 def empty_db():
     """In-memory database fixture; not persistent"""
+    print('empty db fixture setup...')
     return pb.engine_builder('sqlite:///:memory:')
 
 
 @pytest.fixture(scope='function')
 def full_db(empty_db, simple_df):
     """In-memory database fixture; not persistent"""
+    print('full db fixture setup...')
     pb.to_sql(simple_df,
               table_name=TABLE_NAME,
               con=empty_db,
@@ -195,9 +196,12 @@ def test_get_sql_dtype_db(simple_df, empty_db):
     [pd.Series([True, False, 1.0, ]), True],
     [pd.Series([True, False, 0, ]), True],
     [pd.Series([1, 0, 0, ]), True],
+    [pd.Series([1, 0, 2, ]), False],
     [pd.Series([1, 0, None, ]), True],
     [pd.Series([None, None, None, ]), True],
-    [pd.Series([0, 1, 2, ]), False],
+    [pd.Series([0, 1, pd.to_datetime('2017-01-12')]), False],
+    [pd.Series([0, 1, pd.to_datetime('2000')]), False],
+    [pd.Series([pd.to_datetime('2000'), pd.to_datetime('2017-01-12')]), False],
 ])
 def test_series_is_boolean(series, expected):
     assert isinstance(series, pd.Series)
@@ -325,29 +329,27 @@ def test_upsert_incomplete_rows(full_db):
     """upsert new rows with only 1 of 5 values (and index)"""
     assert pb.has_table(full_db, TABLE_NAME)
     df = pb.read_sql(TABLE_NAME, con=full_db)
-    types = df.dtypes
 
     df.loc[11, 'float'] = 9.9
     df.loc[12, 'integer'] = 999
     df.loc[13, 'string'] = 'nah'
     df.loc[14, 'date'] = pd.to_datetime('1968-01-01', utc=True)
 
-    for col in df.columns:
-        print(col)
-        assert types[col] == df.dtypes[col]
-
-    # check that these values still exist
+    # check that these values exist
     assert df.loc[1, 'integer'] == 2
     assert pd.isna(df.loc[11, 'integer'])
+    assert df.loc[13, 'string'] == 'nah'
 
     pb.to_sql(df,
               table_name=TABLE_NAME,
               con=full_db,
               how='upsert')
 
+    # check against pandabase read
     loaded = pb.read_sql(TABLE_NAME, con=full_db)
     assert companda(df, loaded)
 
+    # check against pandas read
     loaded_pd = pd.read_sql(TABLE_NAME, con=full_db, index_col=INDEX_NAME)
     assert companda(df, loaded_pd)
 
@@ -366,7 +368,7 @@ def test_upsert_coerce_float(full_db):
               how='upsert')
 
     for col in df.columns:
-        print(col)
+        # print(col)
         assert types[col] == df.dtypes[col]
 
     loaded = pb.read_sql(TABLE_NAME, con=full_db)

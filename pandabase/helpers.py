@@ -44,6 +44,7 @@ def engine_builder(con):
 
     return con
 
+
 def _get_type_from_df_col(col: pd.Series):
     """
     Take a pd.Series, return its SQLAlchemy datatype
@@ -68,6 +69,7 @@ def _get_type_from_df_col(col: pd.Series):
     else:
         return String
 
+
 def _get_type_from_db_col(col: sqa.Column):
     if isinstance(col.type, sqa.types.Integer):
         return Integer
@@ -79,6 +81,7 @@ def _get_type_from_db_col(col: sqa.Column):
         return Boolean
     else:
         return String
+
 
 def get_column_dtype(column, pd_or_sqla):
     """
