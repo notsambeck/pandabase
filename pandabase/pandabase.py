@@ -37,7 +37,7 @@ import logging
 def to_sql(df: pd.DataFrame, *,
            table_name: str,
            con: str or sqa.engine,
-           how='fail',
+           how='create_only',
            strict=True, ):
     """
     Write records stored in a DataFrame to a SQL database.
@@ -51,8 +51,8 @@ def to_sql(df: pd.DataFrame, *,
     table_name : string
         Name of SQL table.
     con : connection; database string URI < OR > sa.engine
-    how : {'fail', 'upsert', 'append'}, default 'fail'
-        - fail:
+    how : {'create_only', 'upsert', 'append'}, default 'create_only'
+        - create_only:
             If table exists, raise an error and stop.
         - append:
             If table exists, append data. Raise if index overlaps
@@ -70,7 +70,7 @@ def to_sql(df: pd.DataFrame, *,
     engine = engine_builder(con)
     meta = sqa.MetaData()
 
-    if how not in ('fail', 'append', 'upsert',):
+    if how not in ('create_only', 'append', 'upsert',):
         raise ValueError("'{0}' is not valid for if_exists".format(how))
 
     if not isinstance(df, pd.DataFrame):
@@ -89,8 +89,8 @@ def to_sql(df: pd.DataFrame, *,
     ###########################################
     # 2a. make table from db schema; table will be the reference
     if has_table(engine, table_name):
-        if how == 'fail':
-            raise NameError(f'Table {table_name} already exists; param if_exists is set to "fail".')
+        if how == 'create_only':
+            raise NameError(f'Table {table_name} already exists; param "how" is set to "create_only".')
 
         table = Table(table_name, meta, autoload=True, autoload_with=engine)
 
@@ -177,26 +177,14 @@ def to_sql(df: pd.DataFrame, *,
         for col in drop_cols:
             del df_cols_dict[col]
 
-    # Make any new columns as needed with ALTER TABLE
     if new_cols:
-        col_names_string = ", ".join([col.name for col in new_cols])
-        new_column_warning = f' Table[{table_name}]:' + \
-                             f' new Series [{col_names_string}] added around index {df.index[0]}'
-        if strict:
-            raise ValueError(new_column_warning)
-        else:
-            logging.warning(new_column_warning)
-
-        for new_col in new_cols:
-            with engine.begin() as conn:
-                conn.execute(f'ALTER TABLE {table_name} '
-                             f'ADD COLUMN {new_col.name} {new_col.type.compile(engine.dialect)}')
+        raise ValueError(f'The data you are inserting has more columns than database: {new_cols}')
 
     df.index.name = clean_name(df.index.name)
 
     # convert any non-tz-aware datetimes to UTC using pd.to_datetime (warn)
     for col in df.columns:
-        print(col)
+        # print(col)
         if is_datetime64_any_dtype(df[col]):
             if df[col].dt.tz != UTC:
                 if strict:
@@ -208,16 +196,16 @@ def to_sql(df: pd.DataFrame, *,
             # fill any NaNs with SQL null
             # df[col] = df[col].fillna(sqa.sql.null())
 
-    print('connect...')
+    # print('connect...')
     with engine.begin() as con:
         meta.create_all(bind=con)
 
-    print(df)
+    # print(df)
 
     ######################################################
     # FINALLY: either insert/fail, append/fail, or upsert
 
-    if how in ['append', 'fail']:
+    if how in ['append', 'create_only']:
         # will raise IntegrityError if repeated index encountered
         with engine.begin() as con:
             rows = []
@@ -231,9 +219,7 @@ def to_sql(df: pd.DataFrame, *,
             # check index uniqueness by attempting insert; if it fails, update
             with engine.begin() as con:
                 row[row.isna()] = None
-                # row = {**row.fillna(sqa.sql.null()).to_dict(), df.index.name: index}
                 row = {**row.dropna().to_dict(), df.index.name: index}
-                print(row)
                 try:
                     insert = table.insert().values(row)
                     con.execute(insert)
@@ -252,7 +238,6 @@ def read_sql(table_name: str,
     """
     Read in a table from con as a pd.DataFrame, preserving dtypes and primary keys
 
-    TODO: add range limit parameters
     :param table_name: str
     :param con: db connectable
     """
@@ -266,6 +251,7 @@ def read_sql(table_name: str,
     result = con.execute(table.select())
 
     data = result.fetchall()
+    # TODO: add range limit parameters
     df = pd.DataFrame.from_records(data, columns=[col.name for col in table.columns],
                                    coerce_float=True)
 
@@ -285,7 +271,6 @@ def read_sql(table_name: str,
 
         if is_bool_dtype(dtype):
             pass
-            # df[col.name] = df[col.name].astype(pd.Int64Dtype())
         elif is_integer_dtype(dtype):
             df[col.name] = df[col.name].astype(pd.Int64Dtype())
         elif is_float_dtype(dtype):
@@ -294,3 +279,13 @@ def read_sql(table_name: str,
             pass
 
     return df
+
+
+def add_columns_to_db(new_cols, table_name, con):
+    # Make any new columns as needed with ALTER TABLE
+    engine = engine_builder(con)
+
+    for new_col in new_cols:
+        with engine.begin() as conn:
+            conn.execute(f'ALTER TABLE {table_name} '
+                         f'ADD COLUMN {new_col.name} {new_col.type.compile(engine.dialect)}')

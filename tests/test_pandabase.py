@@ -20,7 +20,7 @@ from pandas.api.types import (is_bool_dtype,
 from pytz import UTC
 
 from sqlalchemy import Integer, String, Float, DateTime, Boolean
-from sqlalchemy.exc import IntegrityError
+# from sqlalchemy.exc import IntegrityError
 
 import os
 import logging
@@ -53,7 +53,7 @@ def full_db(empty_db, simple_df):
     pb.to_sql(simple_df,
               table_name=TABLE_NAME,
               con=empty_db,
-              how='fail')
+              how='create_only')
     return empty_db
 
 
@@ -94,12 +94,11 @@ def simple_df():
     df.boolean = [True, False] * (rows//2)
 
     assert df.date[0].tzinfo is not None
-
     return df
 
 
 @pytest.fixture(scope='function')
-def df_with_nan_col():
+def df_with_all_nan_col():
     """make a dumb DataFrame with multiple dtypes and integer index"""
     rows = 10
     df = pd.DataFrame(columns=['date', 'integer', 'float', 'string', 'boolean', 'nan'],
@@ -113,13 +112,11 @@ def df_with_nan_col():
     df.boolean = [True, False] * 5
     df.nan = [None] * 10
 
-    print(df)
-
     return df
 
 
 @pytest.fixture(scope='session')
-def simple_df2():
+def simple_df_with_nans():
     """make a dumb DataFrame with multiple dtypes and integer index, index is valid but columns.hasnans"""
     rows = 10
     df = pd.DataFrame(columns=['date', 'integer', 'float', 'string', 'boolean', 'nan'],
@@ -143,9 +140,9 @@ def simple_df2():
 # BASIC TESTS #
 
 
-def test_get_sql_dtype_df(df_with_nan_col):
+def test_get_sql_dtype_df(df_with_all_nan_col):
     """test that datatype functions work as expected"""
-    df = df_with_nan_col
+    df = df_with_all_nan_col
 
     assert isinstance(df.index, pd.RangeIndex)
 
@@ -153,8 +150,9 @@ def test_get_sql_dtype_df(df_with_nan_col):
     assert get_column_dtype(df.date, 'sqla') == DateTime
     assert get_column_dtype(df.date, 'pd') == np.datetime64
 
-    # assert is_integer_dtype(df.integer)
-    # assert not is_float_dtype(df.integer)
+    assert is_integer_dtype(df.integer)
+    assert not is_float_dtype(df.integer)
+
     assert get_column_dtype(df.integer, 'sqla') == Integer
     assert get_column_dtype(df.integer, 'pd') == pd.Int64Dtype()
 
@@ -170,13 +168,28 @@ def test_get_sql_dtype_df(df_with_nan_col):
     assert get_column_dtype(df.nan, 'pd') is None
 
 
-def test_get_sql_dtype_db(simple_df, empty_db):
-    """test that datatype functions work as expected"""
+def test_get_sql_dtype_from_db(simple_df, empty_db):
+    """test that datatype extraction functions work as expected"""
     df = simple_df
-    table = pb.to_sql(simple_df,
+    table = pb.to_sql(df,
                       table_name='sample',
                       con=empty_db,
-                      how='fail')
+                      how='create_only')
+
+    for col in table.columns:
+        if col.primary_key:
+            assert get_column_dtype(col, 'sqla') == get_column_dtype(df.index, 'sqla')
+            continue
+        assert get_column_dtype(col, 'sqla') == get_column_dtype(df[col.name], 'sqla')
+
+
+def test_get_sql_dtype_from_db_nanas(simple_df_with_nans, empty_db):
+    """test that datatype extraction functions work as expected"""
+    df = simple_df_with_nans
+    table = pb.to_sql(df,
+                      table_name='sample',
+                      con=empty_db,
+                      how='create_only')
 
     for col in table.columns:
         if col.primary_key:
@@ -231,7 +244,7 @@ def test_create_table(session_db, simple_df):
     table = pb.to_sql(simple_df,
                       table_name='sample',
                       con=session_db,
-                      how='fail')
+                      how='create_only')
 
     # print(table.columns)
     assert table.columns[INDEX_NAME].primary_key
@@ -242,7 +255,7 @@ def test_create_table(session_db, simple_df):
     assert pb.has_table(session_db, 'sample')
 
 
-@pytest.mark.parametrize('how', ['fail', 'append'])
+@pytest.mark.parametrize('how', ['create_only', 'append'])
 def test_overwrite_table_fails(full_db, simple_df, how):
     """Try to append/insert rows with conflicting indices"""
     table_name = TABLE_NAME
@@ -267,7 +280,7 @@ def test_create_table_with_index(session_db, simple_df, table_name, index_col_na
     table = pb.to_sql(df,
                       table_name=table_name,
                       con=session_db,
-                      how='fail')
+                      how='create_only')
 
     assert table.columns[index_col_name].primary_key
     assert pb.has_table(session_db, table_name)
@@ -368,18 +381,19 @@ def test_upsert_coerce_float(full_db):
               how='upsert')
 
     for col in df.columns:
-        # print(col)
+        print(col)
         assert types[col] == df.dtypes[col]
 
     loaded = pb.read_sql(TABLE_NAME, con=full_db)
     assert loaded.loc[1, 'float'] == 1.0
 
 
-def test_upsert_coerce_integer(full_db):
+@pytest.mark.parametrize('how', ['append', 'upsert'])
+def test_coerce_integer(full_db, how):
     """insert an integer into float column"""
     assert pb.has_table(full_db, TABLE_NAME)
 
-    df = pd.DataFrame(index=[1], columns=['integer'], data=[[1.0]])
+    df = pd.DataFrame(index=[1], columns=['integer'], data=[[77.0]])
     df.index.name = INDEX_NAME
     types = df.dtypes
 
@@ -393,11 +407,28 @@ def test_upsert_coerce_integer(full_db):
         assert types[col] == df.dtypes[col]
 
     loaded = pb.read_sql(TABLE_NAME, con=full_db)
-    assert loaded.loc[1, 'integer'] == 1
+    assert loaded.loc[1, 'integer'] == 77
 
 
 @pytest.mark.parametrize('how', ['append', 'upsert'])
-def test_add_fails_wrong_index_name(full_db):
+def test_new_column_fails(full_db, how):
+    """insert into a new column"""
+    assert pb.has_table(full_db, TABLE_NAME)
+
+    df = pd.DataFrame(index=[101], columns=['new_column'], data=[[1.1]])
+    df.index.name = INDEX_NAME
+    assert df.loc[101, 'new_column'] == 1.1
+
+    with pytest.raises(ValueError):
+        pb.to_sql(df,
+                  table_name=TABLE_NAME,
+                  con=full_db,
+                  how=how,
+                  strict=False)
+
+
+@pytest.mark.parametrize('how', ['append', 'upsert'])
+def test_add_fails_wrong_index_name(full_db, how):
     assert pb.has_table(full_db, TABLE_NAME)
 
     df = pd.DataFrame(index=[1], columns=['date'], data=[['x']])
@@ -407,7 +438,7 @@ def test_add_fails_wrong_index_name(full_db):
         pb.to_sql(df,
                   table_name=TABLE_NAME,
                   con=full_db,
-                  how='how')
+                  how=how)
 
 
 @pytest.mark.parametrize('how', ['upsert', 'append'])
@@ -415,6 +446,19 @@ def test_upsert_fails_invalid_float(full_db, how):
     assert pb.has_table(full_db, TABLE_NAME)
 
     df = pd.DataFrame(index=[1], columns=['float'], data=[['x']])
+
+    with pytest.raises(ValueError):
+        pb.to_sql(df,
+                  table_name=TABLE_NAME,
+                  con=full_db,
+                  how=how)
+
+
+@pytest.mark.parametrize('how', ['upsert', 'append'])
+def test_upsert_fails_invalid_bool(full_db, how):
+    assert pb.has_table(full_db, TABLE_NAME)
+
+    df = pd.DataFrame(index=[1], columns=['bool'], data=[['x']])
 
     with pytest.raises(ValueError):
         pb.to_sql(df,
@@ -434,17 +478,3 @@ def test_add_fails_invalid_date(full_db, how):
                   table_name=TABLE_NAME,
                   con=full_db,
                   how=how)
-
-
-@pytest.mark.parametrize('how', ['append', 'upsert'])
-def test_add_fails_wrong_index_name(full_db, how):
-    assert pb.has_table(full_db, TABLE_NAME)
-
-    df = pd.DataFrame(index=[1], columns=['date'], data=[['x']])
-
-    with pytest.raises(ValueError):
-        pb.to_sql(df,
-                  table_name=TABLE_NAME,
-                  con=full_db,
-                  how=how)
-
