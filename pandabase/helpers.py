@@ -14,9 +14,17 @@ PANDABASE_DEFAULT_INDEX = 'pandabase_index'
 
 
 def series_is_boolean(col):
-    """return True if a pd.Series only contains True, False, and None; otherwise return False"""
+    """returns:
+    None if column is all None;
+    True if a pd.Series only contains True, False, and None;
+    otherwise False"""
     if not isinstance(col, pd.Series):
         raise TypeError(f'series_is_boolean takes a pd.Series; got {col}::{type(col)} instead')
+    elif len(col.unique()) == 1 and col.unique()[0] is None:
+        # return None for all-None columns
+        return None
+    elif col.isna().all():
+        return None
     elif is_bool_dtype(col):
         return True
     elif is_object_dtype(col):
@@ -128,6 +136,7 @@ def has_table(con, table_name):
 
 
 def clean_name(name):
+    """returns a standardized version of column names: lower case without spaces"""
     return name.lower().strip().replace(' ', '_')
 
 
@@ -146,7 +155,6 @@ def make_clean_columns_dict(df: pd.DataFrame):
         }
 
     assert len(columns) > 0
-
     columns[index_name] = {'dtype': get_column_dtype(df.index, 'sqla'),
                            'pk': True}
 

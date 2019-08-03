@@ -15,7 +15,7 @@ class CompandaNotEqualError(Exception):
 
 
 class Companda(object):
-    """output from companda function; evaluates as boolean + holds a message"""
+    """class Companda is the output from companda(df1, df2); evaluates as boolean + stores a message"""
     def __init__(self, equal: bool, msg=''):
         self.equal = equal
         self.message = msg
