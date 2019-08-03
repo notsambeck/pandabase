@@ -6,9 +6,10 @@ the default may be root/tests. Can be set from Run/Debug Configurations:Template
 """
 import pytest
 
-import pandabase as pb
-from pandabase.helpers import *
-from pandabase.companda import companda
+import os
+import logging
+
+from sqlalchemy import Integer, String, Float, DateTime, Boolean
 
 import pandas as pd
 from pandas.api.types import (is_bool_dtype,
@@ -17,18 +18,18 @@ from pandas.api.types import (is_bool_dtype,
                               is_float_dtype,
                               )
 
-from pytz import UTC
+import pandabase as pb
+from pandabase.helpers import *
+from pandabase.companda import companda
 
-from sqlalchemy import Integer, String, Float, DateTime, Boolean
-# from sqlalchemy.exc import IntegrityError
+import pytz
+UTC = pytz.utc
 
-import os
-import logging
 
 pd.set_option('display.max_colwidth', 8)
 
-TABLE_NAME = 'pre_loaded_table'
-INDEX_NAME = 'user_integer_index'
+TABLE_NAME = 'sample_table_name'
+SAMPLE_INDEX_NAME = 'sample_named_integer_index'
 TEST_LOG = os.path.join('tests', 'test_log.log')
 # rewrite logfile following each test
 logging.basicConfig(level=logging.DEBUG, filename=TEST_LOG, filemode='w')
@@ -47,7 +48,7 @@ def empty_db():
 
 
 @pytest.fixture(scope='function')
-def full_db(empty_db, simple_df):
+def pre_loaded_db(empty_db, simple_df):
     """In-memory database fixture; not persistent"""
     print('full db fixture setup...')
     pb.to_sql(simple_df,
@@ -80,12 +81,28 @@ def sample_csv_dfs():
 
 
 @pytest.fixture(scope='function')
+def minimal_df():
+    """make a basic DataFrame with multiple dtypes, range index"""
+    rows = 6
+    df = pd.DataFrame(columns=['date', 'integer', 'float', 'string', 'boolean'])
+
+    df.date = pd.date_range(pd.to_datetime('2001-01-01 12:00am', utc=True), periods=rows, freq='d', tz=UTC)
+    df.integer = range(rows)
+    df.float = [float(i) / 10 for i in range(rows)]
+    df.string = list('panda_base')[:rows]
+    df.boolean = [True, False] * (rows//2)
+
+    assert df.date[0].tzinfo is not None
+    return df
+
+
+@pytest.fixture(scope='function')
 def simple_df():
     """make a basic DataFrame with multiple dtypes, integer index"""
     rows = 6
     df = pd.DataFrame(columns=['date', 'integer', 'float', 'string', 'boolean'],
                       index=range(rows),)
-    df.index.name = INDEX_NAME
+    df.index.name = SAMPLE_INDEX_NAME
 
     df.date = pd.date_range(pd.to_datetime('2001-01-01 12:00am', utc=True), periods=rows, freq='d', tz=UTC)
     df.integer = range(1, rows+1)
@@ -103,7 +120,7 @@ def df_with_all_nan_col():
     rows = 10
     df = pd.DataFrame(columns=['date', 'integer', 'float', 'string', 'boolean', 'nan'],
                       index=range(rows),)
-    df.index.name = INDEX_NAME
+    df.index.name = SAMPLE_INDEX_NAME
 
     df.date = pd.date_range(pd.to_datetime('2001-01-01 12:00am', utc=True), periods=10, freq='d')
     df.integer = range(1, rows+1)
@@ -121,7 +138,7 @@ def simple_df_with_nans():
     rows = 10
     df = pd.DataFrame(columns=['date', 'integer', 'float', 'string', 'boolean', 'nan'],
                       index=range(rows),)
-    df.index.name = INDEX_NAME
+    df.index.name = SAMPLE_INDEX_NAME
 
     df.date = pd.date_range(pd.to_datetime('2006-01-01 12:00am', utc=True), periods=10, freq='d')
     df.integer = range(17, 27)
@@ -137,7 +154,18 @@ def simple_df_with_nans():
     return df
 
 
-# BASIC TESTS #
+# ========== BASIC TESTS ======== #
+
+
+@pytest.mark.parametrize('df, how', [
+    (pd.DataFrame(index=[2, 2], data=['x', 'y']), 'create_only'),
+    (pd.DataFrame(index=[1, None], columns=['a'], data=['x', 'y']), 'create_only'),
+    (pd.Series([1, 2, 3]), 'create_only'),
+    (pd.DataFrame(index=[1, 2, 3], columns=['a'], data=['x', 'y', 'a']), 'fake_mode'),
+])
+def test_invalid_inputs(df, how, empty_db):
+    with pytest.raises(ValueError):
+        pb.to_sql(df, table_name='blank', con=empty_db, how=how)
 
 
 def test_get_sql_dtype_df(df_with_all_nan_col):
@@ -169,7 +197,7 @@ def test_get_sql_dtype_df(df_with_all_nan_col):
 
 
 def test_get_sql_dtype_from_db(simple_df, empty_db):
-    """test that datatype extraction functions work as expected"""
+    """test that datatype extraction functions work"""
     df = simple_df
     table = pb.to_sql(df,
                       table_name='sample',
@@ -183,7 +211,7 @@ def test_get_sql_dtype_from_db(simple_df, empty_db):
         assert get_column_dtype(col, 'sqla') == get_column_dtype(df[col.name], 'sqla')
 
 
-def test_get_sql_dtype_from_db_nanas(simple_df_with_nans, empty_db):
+def test_get_sql_dtype_from_db_nans(simple_df_with_nans, empty_db):
     """test that datatype extraction functions work as expected"""
     df = simple_df_with_nans
     table = pb.to_sql(df,
@@ -217,8 +245,8 @@ def test_get_sql_dtype_from_db_nanas(simple_df_with_nans, empty_db):
     [pd.Series([0, 1, pd.to_datetime('2017-01-12')]), False],
     [pd.Series([0, 1, pd.to_datetime('2000')]), False],
     [pd.Series([pd.to_datetime('2000'), pd.to_datetime('2017-01-12')]), False],
-    # [pd.Series([True, False, None, ], dtype=pd.Int64Dtype()), True],  # Int64 is broken
-    [pd.Series([np.NaN], dtype=pd.Int64Dtype()), None],  # Int64 is broken
+    [pd.Series(np.array([True, False, np.NaN, ]), dtype='Int64'), True],    # Int64 is broken
+    [pd.Series([np.NaN], dtype=pd.Int64Dtype()), None],                     # Int64 is broken
 ])
 def test_series_is_boolean(series, expected):
     assert isinstance(series, pd.Series)
@@ -226,24 +254,38 @@ def test_series_is_boolean(series, expected):
     assert series_is_boolean(series) == expected
 
 
-def test_read_table(full_db, simple_df):
-    """read pre-written table with pb.read_sql"""
-    assert has_table(full_db, TABLE_NAME)
+def test_read_table(pre_loaded_db, simple_df):
+    """read pre-written table containing simple_df, using pb.read_sql"""
+    assert has_table(pre_loaded_db, TABLE_NAME)
 
-    df = pb.read_sql(TABLE_NAME, full_db)
+    df = pb.read_sql(TABLE_NAME, pre_loaded_db)
 
-    orig_dict = make_clean_columns_dict(simple_df)
-    df_dict = make_clean_columns_dict(df)
-    for key in orig_dict.keys():
+    orig_columns = make_clean_columns_dict(simple_df)
+    loaded_columns = make_clean_columns_dict(df)
+    for key in orig_columns.keys():
         print(key)
         if key == 'nan':
             # column of all NaN values is skipped
             continue
-        assert orig_dict[key] == df_dict[key]
+        assert orig_columns[key] == loaded_columns[key]
     assert companda(df, simple_df)
 
 
-def test_create_table(session_db, simple_df):
+def test_create_read_table_no_index(empty_db, minimal_df):
+    """add a new minimal table"""
+    table = pb.to_sql(minimal_df,
+                      table_name='sample',
+                      con=empty_db,
+                      how='create_only')
+
+    # print(table.columns)
+    assert table.columns[PANDABASE_DEFAULT_INDEX].primary_key
+    loaded = pb.read_sql('sample', con=empty_db)
+    assert pb.has_table(empty_db, 'sample')
+    assert pb.companda(loaded, minimal_df)
+
+
+def test_create_read_table_index(session_db, simple_df):
     """add a new table, read it back, check equality"""
     table = pb.to_sql(simple_df,
                       table_name='sample',
@@ -251,31 +293,31 @@ def test_create_table(session_db, simple_df):
                       how='create_only')
 
     # print(table.columns)
-    assert table.columns[INDEX_NAME].primary_key
+    assert table.columns[SAMPLE_INDEX_NAME].primary_key
 
     loaded = pb.read_sql('sample', con=session_db)
     # print(loaded)
-    assert pb.companda(loaded, simple_df, ignore_nan=True)
+    assert pb.companda(loaded, simple_df, ignore_all_nan_columns=True)
     assert pb.has_table(session_db, 'sample')
 
 
 @pytest.mark.parametrize('how', ['create_only', 'append'])
-def test_overwrite_table_fails(full_db, simple_df, how):
+def test_overwrite_table_fails(pre_loaded_db, simple_df, how):
     """Try to append/insert rows with conflicting indices"""
     table_name = TABLE_NAME
-    assert pb.has_table(full_db, table_name)
+    assert pb.has_table(pre_loaded_db, table_name)
 
     with pytest.raises(Exception):
         pb.to_sql(simple_df,
                   table_name=table_name,
-                  con=full_db,
+                  con=pre_loaded_db,
                   how=how)
 
 
-@pytest.mark.parametrize('table_name, index_col_name', [['integer_index', 'integer'],
-                                                        ['float_index', 'float'],
-                                                        ['datetime_index', 'date'], ])
-def test_create_table_with_index(session_db, simple_df, table_name, index_col_name):
+@pytest.mark.parametrize('table_name, index_col_name', [['integer_index_table', 'integer'],
+                                                        ['float_index_table', 'float'],
+                                                        ['datetime_index_table', 'date'], ])
+def test_create_table_with_different_index(session_db, simple_df, table_name, index_col_name):
     """create new tables in empty db, using different col types as index"""
     df = simple_df.copy()
     df.index = df[index_col_name]
@@ -290,25 +332,25 @@ def test_create_table_with_index(session_db, simple_df, table_name, index_col_na
     assert pb.has_table(session_db, table_name)
 
     loaded = pb.read_sql(table_name, con=session_db)
-    c = pb.companda(loaded, df, ignore_nan=True)
+    c = pb.companda(loaded, df, ignore_all_nan_columns=True)
     if not c:
         raise ValueError(c.msg)
 
 
 @pytest.mark.parametrize('how', ['append', 'upsert'])
-def test_add_new_rows(full_db, simple_df, how):
+def test_add_new_rows(pre_loaded_db, simple_df, how):
     """upsert or append new complete rows"""
-    assert pb.has_table(full_db, TABLE_NAME)
+    assert pb.has_table(pre_loaded_db, TABLE_NAME)
 
     df = simple_df.copy()
     df.index = df.index + 100
 
     pb.to_sql(df,
               table_name=TABLE_NAME,
-              con=full_db,
+              con=pre_loaded_db,
               how=how)
 
-    loaded = pb.read_sql(TABLE_NAME, con=full_db)
+    loaded = pb.read_sql(TABLE_NAME, con=pre_loaded_db)
     # print('loaded post-upsert by pandabase:')
     # print(loaded)
 
@@ -317,10 +359,10 @@ def test_add_new_rows(full_db, simple_df, how):
     assert companda(df, loaded.loc[df.index])
 
 
-def test_upsert_complete_rows(full_db):
+def test_upsert_complete_rows(pre_loaded_db):
     """upsert, changing individual values"""
-    assert pb.has_table(full_db, TABLE_NAME)
-    df = pb.read_sql(TABLE_NAME, con=full_db)
+    assert pb.has_table(pre_loaded_db, TABLE_NAME)
+    df = pb.read_sql(TABLE_NAME, con=pre_loaded_db)
 
     df.loc[1, 'float'] = 9.9
     df.loc[2, 'integer'] = 999
@@ -332,20 +374,20 @@ def test_upsert_complete_rows(full_db):
 
     pb.to_sql(df,
               table_name=TABLE_NAME,
-              con=full_db,
+              con=pre_loaded_db,
               how='upsert')
 
-    loaded = pb.read_sql(TABLE_NAME, con=full_db)
+    loaded = pb.read_sql(TABLE_NAME, con=pre_loaded_db)
     assert companda(df, loaded)
 
-    loaded_pd = pd.read_sql(TABLE_NAME, con=full_db, index_col=INDEX_NAME)
+    loaded_pd = pd.read_sql(TABLE_NAME, con=pre_loaded_db, index_col=SAMPLE_INDEX_NAME)
     assert companda(df, loaded_pd)
 
 
-def test_upsert_incomplete_rows(full_db):
+def test_upsert_incomplete_rows(pre_loaded_db):
     """upsert new rows with only 1 of 5 values (and index)"""
-    assert pb.has_table(full_db, TABLE_NAME)
-    df = pb.read_sql(TABLE_NAME, con=full_db)
+    assert pb.has_table(pre_loaded_db, TABLE_NAME)
+    df = pb.read_sql(TABLE_NAME, con=pre_loaded_db)
 
     df.loc[11, 'float'] = 9.9
     df.loc[12, 'integer'] = 999
@@ -359,81 +401,81 @@ def test_upsert_incomplete_rows(full_db):
 
     pb.to_sql(df,
               table_name=TABLE_NAME,
-              con=full_db,
+              con=pre_loaded_db,
               how='upsert')
 
     # check against pandabase read
-    loaded = pb.read_sql(TABLE_NAME, con=full_db)
+    loaded = pb.read_sql(TABLE_NAME, con=pre_loaded_db)
     assert companda(df, loaded)
 
     # check against pandas read
-    loaded_pd = pd.read_sql(TABLE_NAME, con=full_db, index_col=INDEX_NAME)
+    loaded_pd = pd.read_sql(TABLE_NAME, con=pre_loaded_db, index_col=SAMPLE_INDEX_NAME)
     assert companda(df, loaded_pd)
 
 
-def test_upsert_coerce_float(full_db):
+def test_upsert_coerce_float(pre_loaded_db):
     """insert an integer into float column"""
-    assert pb.has_table(full_db, TABLE_NAME)
+    assert pb.has_table(pre_loaded_db, TABLE_NAME)
 
-    df = pd.DataFrame(index=[1], columns=['float'], data=[[1]])
-    df.index.name = INDEX_NAME
+    df = pd.DataFrame(index=[1], columns=['float'], data=[[1.0]])
+    df.index.name = SAMPLE_INDEX_NAME
     types = df.dtypes
 
     pb.to_sql(df,
               table_name=TABLE_NAME,
-              con=full_db,
+              con=pre_loaded_db,
               how='upsert')
 
     for col in df.columns:
         print(col)
         assert types[col] == df.dtypes[col]
 
-    loaded = pb.read_sql(TABLE_NAME, con=full_db)
+    loaded = pb.read_sql(TABLE_NAME, con=pre_loaded_db)
     assert loaded.loc[1, 'float'] == 1.0
 
 
 @pytest.mark.parametrize('how', ['append', 'upsert'])
-def test_coerce_integer(full_db, how):
+def test_coerce_integer(pre_loaded_db, how):
     """insert an integer into float column"""
-    assert pb.has_table(full_db, TABLE_NAME)
+    assert pb.has_table(pre_loaded_db, TABLE_NAME)
 
     df = pd.DataFrame(index=[1], columns=['integer'], data=[[77.0]])
-    df.index.name = INDEX_NAME
+    df.index.name = SAMPLE_INDEX_NAME
     types = df.dtypes
 
     pb.to_sql(df,
               table_name=TABLE_NAME,
-              con=full_db,
+              con=pre_loaded_db,
               how='upsert')
 
     for col in df.columns:
         print(col)
         assert types[col] == df.dtypes[col]
 
-    loaded = pb.read_sql(TABLE_NAME, con=full_db)
+    loaded = pb.read_sql(TABLE_NAME, con=pre_loaded_db)
     assert loaded.loc[1, 'integer'] == 77
 
 
 @pytest.mark.parametrize('how', ['append', 'upsert'])
-def test_new_column_fails(full_db, how):
+def test_new_column_fails(pre_loaded_db, how):
     """insert into a new column"""
-    assert pb.has_table(full_db, TABLE_NAME)
+    assert pb.has_table(pre_loaded_db, TABLE_NAME)
 
     df = pd.DataFrame(index=[101], columns=['new_column'], data=[[1.1]])
-    df.index.name = INDEX_NAME
+    df.index.name = SAMPLE_INDEX_NAME
     assert df.loc[101, 'new_column'] == 1.1
 
     with pytest.raises(ValueError):
         pb.to_sql(df,
                   table_name=TABLE_NAME,
-                  con=full_db,
+                  con=pre_loaded_db,
                   how=how,
                   strict=False)
 
 
 @pytest.mark.parametrize('how', ['append', 'upsert'])
-def test_add_fails_wrong_index_name(full_db, how):
-    assert pb.has_table(full_db, TABLE_NAME)
+def test_add_fails_wrong_index_name(pre_loaded_db, how):
+    assert pb.has_table(pre_loaded_db, TABLE_NAME)
 
     df = pd.DataFrame(index=[1], columns=['date'], data=[['x']])
     df.index_name = 'not_a_real_name'
@@ -441,44 +483,44 @@ def test_add_fails_wrong_index_name(full_db, how):
     with pytest.raises(ValueError):
         pb.to_sql(df,
                   table_name=TABLE_NAME,
-                  con=full_db,
+                  con=pre_loaded_db,
                   how=how)
 
 
 @pytest.mark.parametrize('how', ['upsert', 'append'])
-def test_upsert_fails_invalid_float(full_db, how):
-    assert pb.has_table(full_db, TABLE_NAME)
+def test_upsert_fails_invalid_float(pre_loaded_db, how):
+    assert pb.has_table(pre_loaded_db, TABLE_NAME)
 
     df = pd.DataFrame(index=[1], columns=['float'], data=[['x']])
 
     with pytest.raises(ValueError):
         pb.to_sql(df,
                   table_name=TABLE_NAME,
-                  con=full_db,
+                  con=pre_loaded_db,
                   how=how)
 
 
 @pytest.mark.parametrize('how', ['upsert', 'append'])
-def test_upsert_fails_invalid_bool(full_db, how):
-    assert pb.has_table(full_db, TABLE_NAME)
+def test_upsert_fails_invalid_bool(pre_loaded_db, how):
+    assert pb.has_table(pre_loaded_db, TABLE_NAME)
 
     df = pd.DataFrame(index=[1], columns=['bool'], data=[['x']])
 
     with pytest.raises(ValueError):
         pb.to_sql(df,
                   table_name=TABLE_NAME,
-                  con=full_db,
+                  con=pre_loaded_db,
                   how=how)
 
 
 @pytest.mark.parametrize('how', ['append', 'upsert'])
-def test_add_fails_invalid_date(full_db, how):
-    assert pb.has_table(full_db, TABLE_NAME)
+def test_add_fails_invalid_date(pre_loaded_db, how):
+    assert pb.has_table(pre_loaded_db, TABLE_NAME)
 
     df = pd.DataFrame(index=[1], columns=['date'], data=[['x']])
 
     with pytest.raises(ValueError):
         pb.to_sql(df,
                   table_name=TABLE_NAME,
-                  con=full_db,
+                  con=pre_loaded_db,
                   how=how)

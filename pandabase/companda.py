@@ -34,21 +34,23 @@ class Companda(object):
         return str(self)
 
 
-def companda(df1: pd.DataFrame, df2: pd.DataFrame, gamma=.0001, ignore_nan=False):
-    """compare two DataFrames; return a Companda object
+def companda(df1: pd.DataFrame, df2: pd.DataFrame, gamma=.0001, ignore_all_nan_columns=False):
+    """compare two DataFrames; return a Companda object that is truth-y or false-y.
 
     Args:
-        df1:
-        df2:
-        gamma:
-        ignore_nan: ignore any all_nan columns
+        df1: pd.DataFrame
+        df2: pd.DataFrame
+        gamma: float (allowable decimal error)
+        ignore_all_nan_columns: ignore any all NaN (i.e. empty) columns
 
-    Returns: a truthy Companda object iff:
+    Returns: Companda(True) if and only if:
         1. columns are equal (i.e. both subsets of each other)
         2. indices are equal
-        3. data is equal (within decimal error gamma)
+        3. data is present/absent in same locations
+        4. data is equal (within decimal error gamma)
+    else: returns Companda(False)
     """
-    if ignore_nan:
+    if ignore_all_nan_columns:
         df1 = df1.copy()
         df2 = df2.copy()
         for df in [df1, df2]:
@@ -88,7 +90,7 @@ def companda(df1: pd.DataFrame, df2: pd.DataFrame, gamma=.0001, ignore_nan=False
         if index_unequal.sum():
 
             return Companda(False,
-                            f'Equal length indices, but {index_unequal.sum()}/{len(index_unequal)} '
+                            f'Equal length indices, but {index_unequal.sum()} out of {len(index_unequal)} '
                             f'index values are different.')
 
     # VALUES
@@ -97,7 +99,16 @@ def companda(df1: pd.DataFrame, df2: pd.DataFrame, gamma=.0001, ignore_nan=False
             return Companda(False, f"columns and indices equal, but datatypes not equal in column {col}.")
 
         if is_float_dtype(df1[col]) or is_integer_dtype(df1[col]):
-            diff = pd.Series(pd.np.subtract(df1[col].values, df2[col].values) > pd.np.multiply(gamma, df1[col]))
+            if pd.np.array_equal(df1[col].isna(), df2[col].isna()):
+                if pd.np.array_equal(df1[col].dropna(), df2[col].dropna()):
+                    continue
+                else:
+                    diff = pd.Series(pd.np.subtract(df1.dropna()[col].values,
+                                                    df2.dropna()[col].values) > pd.np.multiply(gamma, df1[col]))
+            else:
+                print(df1[col])
+                print(df2[col])
+                return Companda(False, f"columns and indices equal; values have different NaN values in {col}.")
             if diff.sum() == 0:
                 continue
             else:

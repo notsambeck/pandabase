@@ -71,7 +71,7 @@ def to_sql(df: pd.DataFrame, *,
     meta = sqa.MetaData()
 
     if how not in ('create_only', 'append', 'upsert',):
-        raise ValueError("'{0}' is not valid for if_exists".format(how))
+        raise ValueError(f"{how} is not a valid value for parameter: 'how'")
 
     if not isinstance(df, pd.DataFrame):
         raise ValueError('to_sql() requires a DataFrame as input')
@@ -80,8 +80,9 @@ def to_sql(df: pd.DataFrame, *,
         raise ValueError('DataFrame index is not unique.')
     if df.index.hasnans:
         raise ValueError('DataFrame index has NaN values.')
-    if df.index.name is None:
-        raise ValueError('DataFrame.index.name == None; must set with df.index.name')
+    # allow unnamed index
+    # if df.index.name is None:
+        # raise ValueError('DataFrame.index.name == None; must set df.index.name')
 
     # make a list of df columns for later:
     df_cols_dict = make_clean_columns_dict(df)
@@ -180,7 +181,10 @@ def to_sql(df: pd.DataFrame, *,
     if new_cols:
         raise ValueError(f'The data you are inserting has more columns than database: {new_cols}')
 
-    df.index.name = clean_name(df.index.name)
+    if df.index.name is not None:
+        df.index.name = clean_name(df.index.name)
+    else:
+        df.index.name = PANDABASE_DEFAULT_INDEX
 
     # convert any non-tz-aware datetimes to UTC using pd.to_datetime (warn)
     for col in df.columns:
@@ -256,23 +260,28 @@ def read_sql(table_name: str,
                                    coerce_float=True)
 
     for col in table.columns:
-        dtype = get_column_dtype(col, pd_or_sqla='pd')
-
-        # force all dates to utc
-        if is_datetime64_any_dtype(dtype):
-            df[col.name] = pd.to_datetime(df[col.name].values, utc=True)
-
         # deal with primary key first; never convert primary key to nullable
         if col.primary_key:
+            print(f'index column is {col.name}')
             df.index = df[col.name]
-            df.index.name = col.name
+            dtype = get_column_dtype(col, pd_or_sqla='pd', index=True)
+            # force all dates to utc
+            if is_datetime64_any_dtype(dtype):
+                df[col.name] = pd.to_datetime(df[col.name].values, utc=True)
+
+            if col.name != PANDABASE_DEFAULT_INDEX:
+                df.index.name = col.name
             df = df.drop(columns=[col.name])
             continue
+        else:
+            dtype = get_column_dtype(col, pd_or_sqla='pd')
+            # force all dates to utc
+            if is_datetime64_any_dtype(dtype):
+                df[col.name] = pd.to_datetime(df[col.name].values, utc=True)
 
-        if is_bool_dtype(dtype):
-            pass
-        elif is_integer_dtype(dtype):
-            df[col.name] = df[col.name].astype(pd.Int64Dtype())
+        # convert other dtypes to nullable
+        if is_bool_dtype(dtype) or is_integer_dtype(dtype):
+            df[col.name] = pd.Series(np.array(df[col.name], dtype=float), dtype=pd.Int64Dtype())
         elif is_float_dtype(dtype):
             pass
         elif is_string_dtype(col):
