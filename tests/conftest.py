@@ -115,18 +115,19 @@ def simple_df():
 @pytest.fixture(scope='function')
 def df_with_all_nan_col():
     """make a dumb DataFrame with multiple dtypes and integer index"""
-    rows = 10
+    rows = 6
     df = pd.DataFrame(columns=['date', 'integer', 'float', 'string', 'boolean', 'nan'],
                       index=range(rows),)
     df.index.name = SAMPLE_INDEX_NAME
 
-    df.date = pd.date_range(pd.to_datetime('2001-01-01 12:00am', utc=True), periods=10, freq='d')
+    df.date = pd.date_range(pd.to_datetime('2001-01-01 12:00am', utc=True), periods=rows, freq='d', tz=UTC)
     df.integer = range(1, rows+1)
-    df.float = [float(i) / 10 for i in range(10)]
-    df.string = list('panda_base')
-    df.boolean = [True, False] * 5
-    df.nan = [None] * 10
+    df.float = [float(i) / 10 for i in range(rows)]
+    df.string = list('panda_base')[:rows]
+    df.boolean = [True, False] * (rows//2)
+    df.nan = [pd.np.NaN] * rows
 
+    assert df.date[0].tzinfo == UTC
     return df
 
 

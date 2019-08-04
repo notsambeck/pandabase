@@ -221,9 +221,9 @@ def test_create_table_with_different_index(session_db, simple_df, table_name, in
         raise ValueError(c.msg)
 
 
-@pytest.mark.parametrize('table_name, index_col_name', [['integer_index_table', 'integer'],
-                                                        ['float_index_table', 'float'],
-                                                        ['datetime_index_table', 'date'], ])
+@pytest.mark.parametrize('table_name, index_col_name', [['integer_index_table1', 'integer'],
+                                                        ['float_index_table1', 'float'],
+                                                        ['datetime_index_table1', 'date'], ])
 def test_create_read_table_with_different_index(session_db, simple_df, table_name, index_col_name):
     """create new tables in empty db, using different col types as index, read with pandabase"""
     df = simple_df.copy()
