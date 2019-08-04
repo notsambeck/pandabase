@@ -25,8 +25,6 @@ from .helpers import *
 import pandas as pd
 from pandas.api.types import is_string_dtype
 
-from pytz import UTC
-
 import sqlalchemy as sqa
 from sqlalchemy import Table
 from sqlalchemy.exc import IntegrityError
@@ -254,7 +252,9 @@ def read_sql(table_name: str,
     meta = sqa.MetaData(bind=engine)
     table = Table(table_name, meta, autoload=True, autoload_with=engine)
 
-    if len(table.primary_key.columns) != 1:
+    if len(table.primary_key.columns) == 0:
+        print('no index')
+    elif len(table.primary_key.columns) != 1:
         raise NotImplementedError('pandabase is not compatible with multi-index tables')
 
     result = con.execute(table.select())
@@ -272,12 +272,15 @@ def read_sql(table_name: str,
             dtype = get_column_dtype(col, pd_or_sqla='pd', index=True)
             # force all dates to utc
             if is_datetime64_any_dtype(dtype):
-                print(df[col.name].dt.tz, 'old')
-                df[col.name] = pd.to_datetime(df[col.name].values, utc=True)
-                print(df[col.name].dt.tz, 'new')
+                print(df.index.tz, 'PK - old...')
+                df.index = pd.to_datetime(df[col.name].values, utc=True)
+                print(df.index.tz, 'PK - new')
 
-            if col.name != PANDABASE_DEFAULT_INDEX:
+            if col.name == PANDABASE_DEFAULT_INDEX:
+                df.index.name = None
+            else:
                 df.index.name = col.name
+
             df = df.drop(columns=[col.name])
             continue
         else:
@@ -285,8 +288,9 @@ def read_sql(table_name: str,
             dtype = get_column_dtype(col, pd_or_sqla='pd')
             # force all dates to utc
             if is_datetime64_any_dtype(dtype):
-                pass
-                # df[col.name] = pd.to_datetime(df[col.name].values, utc=True)
+                print(df[col.name].dt.tz, 'regular col - old...')
+                df[col.name] = pd.to_datetime(df[col.name].values, utc=True)
+                print(df[col.name].dt.tz, 'regular col - new')
 
         # convert other dtypes to nullable
         if is_bool_dtype(dtype) or is_integer_dtype(dtype):

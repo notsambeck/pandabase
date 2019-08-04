@@ -31,13 +31,19 @@ class Companda(object):
         return str(self)
 
 
-def companda(df1: pd.DataFrame, df2: pd.DataFrame, gamma=.001, ignore_all_nan_columns=False):
+def companda(df1: pd.DataFrame,
+             df2: pd.DataFrame,
+             epsilon=.001,
+             check_dtype=False,
+             ignore_all_nan_columns=False,
+             ):
     """compare two DataFrames; return a Companda object that is truth-y or false-y.
 
     Args:
         df1: pd.DataFrame
         df2: pd.DataFrame
-        gamma: float (allowable decimal error)
+        epsilon: float (allowable decimal error)
+        check_dtype: bool
         ignore_all_nan_columns: ignore any all NaN (i.e. empty) columns
 
     Returns: Companda(True) if and only if:
@@ -85,14 +91,16 @@ def companda(df1: pd.DataFrame, df2: pd.DataFrame, gamma=.001, ignore_all_nan_co
 
     # VALUES
     for col in df1.columns:
-        try:
-            if not df1[col].dtype == df2[col].dtype:
-                return Companda(False, f"columns and indices equal, but datatypes not equal:{col}"
-                                       f"::{df1[col].dtype}/{df2[col].dtype}.")
-        except TypeError:
-            if not df1[col].dtype is df2[col].dtype:
-                return Companda(False, f"columns and indices equal, but datatypes not equal in column {col}"
-                                       f"::{df1[col].dtype}/{df2[col].dtype}.")
+        # datatype checks
+        if check_dtype:
+            try:
+                if not df1[col].dtype == df2[col].dtype:
+                    return Companda(False, f"columns and indices equal, but datatypes not equal:{col}"
+                                           f"::{df1[col].dtype}/{df2[col].dtype}.")
+            except TypeError:
+                if not df1[col].dtype is df2[col].dtype:
+                    return Companda(False, f"columns and indices equal, but datatypes not equal in column {col}"
+                                           f"::{df1[col].dtype}/{df2[col].dtype}.")
 
         # CHECK FOR DIFFERENT DATATYPES EXPLICITLY
         if is_float_dtype(df1[col]) or is_integer_dtype(df1[col]):
@@ -101,7 +109,7 @@ def companda(df1: pd.DataFrame, df2: pd.DataFrame, gamma=.001, ignore_all_nan_co
                     continue
                 else:
                     diff = pd.Series(pd.np.subtract(df1.dropna()[col].values,
-                                                    df2.dropna()[col].values) > gamma, df1[col])
+                                                    df2.dropna()[col].values) > epsilon, df1[col])
             else:
                 print(df1)
                 print(df2)

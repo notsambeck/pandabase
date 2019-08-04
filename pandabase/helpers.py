@@ -11,7 +11,7 @@ import sqlalchemy as sqa
 from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean
 
 # fake random index name in case of not explicitly indexed data
-PANDABASE_DEFAULT_INDEX = 'pandabase_default_index_hc76wy990'
+PANDABASE_DEFAULT_INDEX = 'pandabase_default_index_237856037524875'
 
 
 def series_is_boolean(col: pd.Series or pd.Index):

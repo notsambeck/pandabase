@@ -2,6 +2,7 @@ import pandas as pd
 import pytest
 
 import pandabase as pb
+
 from pandas import set_option
 from os.path import join
 from logging import basicConfig, DEBUG
@@ -46,13 +47,18 @@ def empty_db():
 
 
 @pytest.fixture(scope='function')
-def pre_loaded_db(empty_db, simple_df):
-    """In-memory database fixture; not persistent"""
+def pandas_loaded_db(empty_db, simple_df):
+    """In-memory database fixture; not persistent, written with Pandas.DataFrame.to_sql"""
     print('full db fixture setup...')
-    pb.to_sql(simple_df,
-              table_name=TABLE_NAME,
-              con=empty_db,
-              how='create_only')
+    simple_df.to_sql(TABLE_NAME, con=empty_db, index=SAMPLE_INDEX_NAME)
+    return empty_db
+
+
+@pytest.fixture(scope='function')
+def pre_loaded_db(empty_db, simple_df):
+    """In-memory database fixture; not persistent, written with pandabase.to_sql"""
+    print('full db fixture setup...')
+    pb.to_sql(simple_df, table_name=TABLE_NAME, con=empty_db)
     return empty_db
 
 
@@ -103,8 +109,13 @@ def simple_df():
     df.index.name = SAMPLE_INDEX_NAME
 
     df.date = pd.date_range(pd.to_datetime('2001-01-01 12:00am', utc=True), periods=rows, freq='d', tz=UTC)
+
     df.integer = range(1, rows+1)
+    df.integer = df.integer.astype(pd.Int64Dtype())
+
     df.float = [float(i) / 10 for i in range(rows)]
+    df.float = df.float.astype(pd.np.float)
+
     df.string = list('panda_base')[:rows]
     df.boolean = [True, False] * (rows//2)
 

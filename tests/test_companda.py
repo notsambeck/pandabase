@@ -77,7 +77,7 @@ def test_different_companda(minimal_df, simple_df):
     assert not companda(minimal_df, simple_df)
 
 
-def test_same_companda_alter_dtype2(minimal_df):
+def test_same_companda_alter_dtype(minimal_df):
     """changing between types changes equality (e.g. bool!=int)"""
     df2 = minimal_df.copy()
     # print(type(minimal_df.boolean[0]))
@@ -87,7 +87,7 @@ def test_same_companda_alter_dtype2(minimal_df):
     # print(type(df2.boolean[0]))
     print(minimal_df.dtypes)
     print(df2.dtypes)
-    assert not companda(df2, minimal_df)
+    assert not companda(df2, minimal_df, check_dtype=True)
 
 
 def test_same_companda_epsilon1(simple_df):
