@@ -88,6 +88,8 @@ def to_sql(df: pd.DataFrame, *,
     df_cols_dict = make_clean_columns_dict(df)
 
     ###########################################
+    drop_cols, new_cols = None, None
+
     # 2a. make table from db schema; table will be the reference
     if has_table(engine, table_name):
         if how == 'create_only':
@@ -98,6 +100,72 @@ def to_sql(df: pd.DataFrame, *,
         if how == 'upsert' and table.primary_key == PANDABASE_DEFAULT_INDEX:
             raise IOError('Cannot upsert with an automatic index')
 
+        # 3. iterate over df_columns; confirm that types are compatible and all columns exist, delete empty columns
+        new_cols = []
+        drop_cols = []
+        for name, df_col_info in df_cols_dict.items():
+            if df_col_info['dtype'] is None:
+                drop_cols.append(name)
+            if name not in table.columns:
+                if df_col_info['dtype'] is not None:
+                    new_cols.append(make_column(name, df_col_info))
+                    continue
+
+                else:
+                    logging.warning(f'tried to add all NaN column {name}')
+                    continue
+
+            # check that dtypes and PKs match for existing columns
+            col = table.columns[name]
+            if col.primary_key != df_col_info['pk']:
+                raise ValueError(f'Inconsistent pk for col: {name}! db: {col.primary_key} / '
+                                 f'df: {df_col_info["pk"]}')
+
+            db_sqla_dtype = get_column_dtype(col, pd_or_sqla='sqla')
+
+            # COERCE BAD DATATYPES
+            if not db_sqla_dtype == df_col_info['dtype']:
+                """
+                this is where things become complicated
+
+                we know type of existing db_column; this is the correct type for new data
+                we know the pandas dtype of df column
+
+                this section of code will generally execute if the db dtype is a real type, and df dtype is 'object'
+                often as a result of the df column being a non-nullable Pandas dtype (np.int64, np.bool) with Nans, 
+                and the db column being the 'true' datatype (possibly plus NULL)
+
+                simply coercing the column with .astype(np.bool) etc. coerces None to 'None'
+
+                a solution?
+                build a mask of NaN values
+                coerce columns
+                when inserting values to db, 
+                    first check if value is None, 
+                    then insert...
+                """
+                db_pandas_dtype = get_column_dtype(col, pd_or_sqla='pd')
+                if is_datetime64_any_dtype(db_pandas_dtype):
+                    df[name] = pd.to_datetime(df[name].values, utc=True)
+                elif (
+                        is_integer_dtype(df_col_info['dtype']) and is_float_dtype(db_pandas_dtype)) or (
+                        is_float_dtype(df_col_info['dtype']) and is_integer_dtype(db_pandas_dtype)
+                ):
+                    print(f'NUMERIC DTYPE: converting df[{name} from {df[name].dtype} to {db_pandas_dtype}')
+                    df[name] = df[name].astype(db_pandas_dtype)
+                    print(f'new dtypes: {df.dtypes}')
+                    # TODO: explicitly deal with None vs. arbitrary integer
+                    # df[name] = df[name].fillna(-9999).astype(db_pandas_dtype)
+                elif is_string_dtype(df_col_info['dtype']):
+                    print(f'STRING DTYPE: NOT converting df[{name}] from {df[name].dtype} to {db_pandas_dtype}')
+                    # TODO - does this need to happen too?
+                    # df[name] = df[name].astype(db_pandas_dtype)
+                else:
+                    raise ValueError(
+                        f'Inconsistent type for col: {name}.  '
+                        f'db: {db_pandas_dtype} /'
+                        f'df: {df_col_info["dtype"]}')
+
     # 2b. unless it's a brand-new table
     else:
         logging.info(f'Creating new table {table_name}')
@@ -106,71 +174,6 @@ def to_sql(df: pd.DataFrame, *,
                         if info['dtype'] is not None])
 
     ###############################################################
-    # 3. iterate over df_columns; confirm that types are compatible and all columns exist, delete empty columns
-    new_cols = []
-    drop_cols = []
-    for name, df_col_info in df_cols_dict.items():
-        if df_col_info['dtype'] is None:
-            drop_cols.append(name)
-        if name not in table.columns:
-            if df_col_info['dtype'] is not None:
-                new_cols.append(make_column(name, df_col_info))
-                continue
-
-            else:
-                logging.warning(f'tried to add all NaN column {name}')
-                continue
-
-        # check that dtypes and PKs match for existing columns
-        col = table.columns[name]
-        if col.primary_key != df_col_info['pk']:
-            raise ValueError(f'Inconsistent pk for col: {name}! db: {col.primary_key} / '
-                             f'df: {df_col_info["pk"]}')
-
-        db_sqla_dtype = get_column_dtype(col, pd_or_sqla='sqla')
-
-        # COERCE BAD DATATYPES
-        if not db_sqla_dtype == df_col_info['dtype']:
-            """
-            this is where things become complicated
-            
-            we know type of existing db_column; this is the correct type for new data
-            we know the pandas dtype of df column
-            
-            this section of code will generally execute if the db dtype is a real type, and df dtype is 'object'
-            often as a result of the df column being a non-nullable Pandas dtype (np.int64, np.bool) with Nans, 
-            and the db column being the 'true' datatype (possibly plus NULL)
-            
-            simply coercing the column with .astype(np.bool) etc. also coerces None to 'None"
-            
-            solution?
-            build a mask of NaN values
-            coerce columns
-            when inserting values to db, 
-                first check if value is None, 
-                then insert
-            """
-            db_pandas_dtype = get_column_dtype(col, pd_or_sqla='pd')
-            if is_datetime64_any_dtype(db_pandas_dtype):
-                df[name] = pd.to_datetime(df[name].values, utc=True)
-            elif (
-                    is_integer_dtype(df_col_info['dtype']) and is_float_dtype(db_pandas_dtype)) or (
-                    is_float_dtype(df_col_info['dtype']) and is_integer_dtype(db_pandas_dtype)
-            ):
-                print(f'NUMERIC DTYPE: converting df[{name} from {df[name].dtype} to {db_pandas_dtype}')
-                df[name] = df[name].astype(db_pandas_dtype)
-                print(f'new dtypes: {df.dtypes}')
-                # TODO: explicitly deal with None vs. arbitrary integer
-                # df[name] = df[name].fillna(-9999).astype(db_pandas_dtype)
-            elif is_string_dtype(df_col_info['dtype']):
-                print(f'STRING DTYPE: NOT converting df[{name}] from {df[name].dtype} to {db_pandas_dtype}')
-                # TODO - does this need to happen too?
-                # df[name] = df[name].astype(db_pandas_dtype)
-            else:
-                raise ValueError(
-                    f'Inconsistent type for col: {name}.  '
-                    f'db: {db_pandas_dtype} /'
-                    f'df: {df_col_info["dtype"]}')
 
     # delete any all-NaN columns
     if drop_cols:
@@ -179,23 +182,25 @@ def to_sql(df: pd.DataFrame, *,
             del df_cols_dict[col]
 
     if new_cols:
-        raise ValueError(f'The data you are inserting has more columns than database: {new_cols}')
+        raise ValueError(f'Data to insert includes columns that are not in database: {new_cols}')
 
     if df.index.name is not None:
         df.index.name = clean_name(df.index.name)
     else:
         df.index.name = PANDABASE_DEFAULT_INDEX
 
-    # convert any non-tz-aware datetimes to UTC using pd.to_datetime (warn)
     for col in df.columns:
-        # print(col)
         if is_datetime64_any_dtype(df[col]):
-            if df[col].dt.tz != UTC:
-                if strict:
-                    raise ValueError(f'Strict=True; column {col} is tz-naive or not UTC. Please correct.')
-                else:
-                    logging.warning(f'{col} was stored in tz-naive format; automatically converted to UTC')
-                    df[col] = pd.to_datetime(df[col].values, utc=True)
+            if df[col].dt.tz is None:
+                raise ValueError(f'Column {col} is tz-naive. Please correct.')
+            else:
+                print(col, 'tzinfo =', df[col].dt.tz)
+
+    if is_datetime64_any_dtype(df.index):
+        if df.index.tz is None:
+            raise ValueError(f'Index {df.index.name} is tz-naive. Please correct.')
+        else:
+            print(df.index, 'tzinfo =', df.index.tz)
 
             # fill any NaNs with SQL null
             # df[col] = df[col].fillna(sqa.sql.null())
@@ -267,17 +272,21 @@ def read_sql(table_name: str,
             dtype = get_column_dtype(col, pd_or_sqla='pd', index=True)
             # force all dates to utc
             if is_datetime64_any_dtype(dtype):
+                print(df[col.name].dt.tz, 'old')
                 df[col.name] = pd.to_datetime(df[col.name].values, utc=True)
+                print(df[col.name].dt.tz, 'new')
 
             if col.name != PANDABASE_DEFAULT_INDEX:
                 df.index.name = col.name
             df = df.drop(columns=[col.name])
             continue
         else:
+            print(f'non-pk column: {col}')
             dtype = get_column_dtype(col, pd_or_sqla='pd')
             # force all dates to utc
             if is_datetime64_any_dtype(dtype):
-                df[col.name] = pd.to_datetime(df[col.name].values, utc=True)
+                pass
+                # df[col.name] = pd.to_datetime(df[col.name].values, utc=True)
 
         # convert other dtypes to nullable
         if is_bool_dtype(dtype) or is_integer_dtype(dtype):

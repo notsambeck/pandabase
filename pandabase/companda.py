@@ -106,8 +106,8 @@ def companda(df1: pd.DataFrame, df2: pd.DataFrame, gamma=.0001, ignore_all_nan_c
                     diff = pd.Series(pd.np.subtract(df1.dropna()[col].values,
                                                     df2.dropna()[col].values) > pd.np.multiply(gamma, df1[col]))
             else:
-                print(df1[col])
-                print(df2[col])
+                print(df1)
+                print(df2)
                 return Companda(False, f"columns and indices equal; values have different NaN values in {col}.")
             if diff.sum() == 0:
                 continue
