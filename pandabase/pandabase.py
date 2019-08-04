@@ -294,7 +294,8 @@ def read_sql(table_name: str,
 
         # convert other dtypes to nullable
         if is_bool_dtype(dtype) or is_integer_dtype(dtype):
-            df[col.name] = pd.Series(np.array(df[col.name], dtype=float), dtype=pd.Int64Dtype())
+            df[col.name] = np.array(df[col.name], dtype=float)
+            df[col.name] = df[col.name].astype(pd.Int64Dtype())
         elif is_float_dtype(dtype):
             pass
         elif is_string_dtype(col):

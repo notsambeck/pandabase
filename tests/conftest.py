@@ -55,7 +55,7 @@ def pandas_loaded_db(empty_db, simple_df):
 
 
 @pytest.fixture(scope='function')
-def pre_loaded_db(empty_db, simple_df):
+def pandabase_loaded_db(empty_db, simple_df):
     """In-memory database fixture; not persistent, written with pandabase.to_sql"""
     print('full db fixture setup...')
     pb.to_sql(simple_df, table_name=TABLE_NAME, con=empty_db)
@@ -110,8 +110,8 @@ def simple_df():
 
     df.date = pd.date_range(pd.to_datetime('2001-01-01 12:00am', utc=True), periods=rows, freq='d', tz=UTC)
 
-    df.integer = range(1, rows+1)
-    df.integer = df.integer.astype(pd.Int64Dtype())
+    df.integer = range(777, rows+777)
+    # df.integer = df.integer.astype(pd.Int64Dtype())   # nullable int is converted to Object as an index
 
     df.float = [float(i) / 10 for i in range(rows)]
     df.float = df.float.astype(pd.np.float)

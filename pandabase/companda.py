@@ -61,15 +61,22 @@ def companda(df1: pd.DataFrame,
                 if get_column_dtype(df[col], 'pd') is None:
                     df.drop([col], axis=1, inplace=True)
     # COLUMNS
-    if len(df1.columns) != len(df2.columns):
-        return Companda(False, f'len(df1.cols) = {len(df1.columns)}, len(df2.cols) = {len(df2.columns)}')
-
     cols1 = set(df1.columns)
     cols2 = set(df2.columns)
+    missing_from_2 = []
     for col in cols1:
         if col not in cols2:
-            msg = f'{col} from df1 does not exist in df2'
-            return Companda(False, msg)
+            missing_from_2.append(col)
+    missing_from_1 = []
+    for col in cols2:
+        if col not in cols1:
+            missing_from_1.append(col)
+    if missing_from_2 or missing_from_1:
+        msg = f'{missing_from_2} missing from df2 and {missing_from_1} missing from df1'
+        return Companda(False, msg)
+
+    if len(df1.columns) != len(df2.columns):
+        return Companda(False, f'len(df1.cols) = {len(df1.columns)}, len(df2.cols) = {len(df2.columns)}')
 
     # INDEX
     df1 = df1.sort_index()
@@ -87,7 +94,7 @@ def companda(df1: pd.DataFrame,
 
         return Companda(False,
                         f'Equal length indices, but {index_unequal.sum()} out of {len(index_unequal)} '
-                        f'index values are different.')
+                        f'index values are different. {df1.index} / {df2.index}')
 
     # VALUES
     for col in df1.columns:
