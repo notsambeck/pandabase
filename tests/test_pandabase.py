@@ -206,7 +206,7 @@ def test_create_table_with_different_index_pandas(session_db, simple_df, table_n
 
     c = pb.companda(loaded, df, ignore_all_nan_columns=True)
     if not c:
-        raise ValueError(c.msg)
+        raise ValueError(c.message)
 
 
 @pytest.mark.parametrize('table_name, index_col_name', [['integer_index_table1', 'integer'],
@@ -231,7 +231,7 @@ def test_create_read_table_with_different_index(session_db, simple_df, table_nam
     loaded = pb.read_sql(table_name, con=session_db)
     c = pb.companda(loaded, orig_df, ignore_all_nan_columns=True)
     if not c:
-        raise ValueError(c.msg)
+        raise ValueError(c.message)
 
 
 @pytest.mark.parametrize('how', ['append', 'upsert'])

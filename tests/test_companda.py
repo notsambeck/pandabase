@@ -142,7 +142,7 @@ def test_same_companda_datetime2(simple_df):
     df = simple_df.copy()
     df['date'] = pd.to_datetime(df['date'].values, utc=False)
     c = companda(df, simple_df)
-    print(c.msg)
+    print(c.message)
     assert not c
 
 
@@ -150,5 +150,5 @@ def test_same_companda_datetime3(simple_df):
     df = simple_df.copy()
     df['date'] = pd.to_datetime(df['date'].values, utc=False).tz_localize(TZ)
     c = companda(df, simple_df)
-    print(c.msg)
+    print(c.message)
     assert not c

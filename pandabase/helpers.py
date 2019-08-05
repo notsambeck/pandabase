@@ -18,7 +18,8 @@ def series_is_boolean(col: pd.Series or pd.Index):
     """returns:
     None if column is all None;
     True if a pd.Series only contains True, False, and None;
-    otherwise False"""
+    otherwise False
+    does not interpret all-zero or all-one columns as boolean"""
     if len(col.unique()) == 1 and col.unique()[0] is None:
         # return None for all-None columns
         return None
@@ -30,12 +31,16 @@ def series_is_boolean(col: pd.Series or pd.Index):
         for val in col.unique():
             if val not in [True, False, None]:
                 return False
+            if not (False in col.unique() and True in col.unique()):
+                return False
         return True
     elif is_integer_dtype(col) or is_float_dtype(col):
         for val in col.unique():
             if pd.isna(val):
                 continue
-            if val not in [1, 0]:
+            if val not in [1, 0, None]:
+                return False
+            if not (0 in col.unique() and 1 in col.unique()):
                 return False
         return True
     return False

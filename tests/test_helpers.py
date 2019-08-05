@@ -42,6 +42,8 @@ def test_get_sql_dtype_df(df_with_all_nan_col):
     [pd.Series([1, 0, 0, ]), True],
     [pd.Series([1, 0, 2, ]), False],
     [pd.Series([1, 0, None, ]), True],
+    [pd.Series([0, 0, 0, ]), False],
+    [pd.Series([1, 1, 1, ]), False],
     [pd.Series([None, None, None, ]), None],
     # [pd.Series([np.NaN], dtype=bool), None],   # doesn't work - bool coerces NaN to False
     [pd.Series([np.NaN], dtype=str), None],

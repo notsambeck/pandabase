@@ -16,19 +16,19 @@ class CompandaNotEqualError(Exception):
 
 class Companda(object):
     """class Companda is the output from companda(df1, df2); evaluates as boolean + stores a message"""
-    def __init__(self, equal: bool, msg=''):
+    def __init__(self,
+                 equal: bool,
+                 columns_equal: bool,
+                 message='', ):
         self.equal = equal
-        self.message = msg
+        self.columns_equal = columns_equal
+        self.message = message
 
     def __bool__(self):
         return self.equal
 
     def __repr__(self):
-        return str(self.equal) + ": " + self.message
-
-    @property
-    def msg(self):
-        return str(self)
+        return f'equal: {self.equal} \n cols: {self.columns_equal} \n {self.message}'
 
 
 def companda(df1: pd.DataFrame,
@@ -73,26 +73,26 @@ def companda(df1: pd.DataFrame,
             missing_from_1.append(col)
     if missing_from_2 or missing_from_1:
         msg = f'{missing_from_2} missing from df2 and {missing_from_1} missing from df1'
-        return Companda(False, msg)
+        return Companda(False, False, msg)
 
     if len(df1.columns) != len(df2.columns):
-        return Companda(False, f'len(df1.cols) = {len(df1.columns)}, len(df2.cols) = {len(df2.columns)}')
+        return Companda(False, False, f'len(df1.cols) = {len(df1.columns)}, len(df2.cols) = {len(df2.columns)}')
 
     # INDEX
     df1 = df1.sort_index()
     df2 = df2.sort_index()
 
     if len(df1) != len(df2):
-        return Companda(False, f'len(df1) = {len(df1)}, len(df2) = {len(df2)}')
+        return Companda(False, True, f'len(df1) = {len(df1)}, len(df2) = {len(df2)}')
 
     if df1.index.name != df2.index.name:
-        return Companda(False,
+        return Companda(False, True,
                         f'Different index names: {df1.index.name}, {df2.index.name}')
 
     index_unequal = pd.Series(df1.index != df2.index)
     if index_unequal.sum():
 
-        return Companda(False,
+        return Companda(False, True,
                         f'Equal length indices, but {index_unequal.sum()} out of {len(index_unequal)} '
                         f'index values are different. {df1.index} / {df2.index}')
 
@@ -102,12 +102,14 @@ def companda(df1: pd.DataFrame,
         if check_dtype:
             try:
                 if not df1[col].dtype == df2[col].dtype:
-                    return Companda(False, f"columns and indices equal, but datatypes not equal:{col}"
-                                           f"::{df1[col].dtype}/{df2[col].dtype}.")
+                    return Companda(False, True,
+                                    f"columns and indices equal, but datatypes not equal:{col}"
+                                    f"::{df1[col].dtype}/{df2[col].dtype}.")
             except TypeError:
                 if not df1[col].dtype is df2[col].dtype:
-                    return Companda(False, f"columns and indices equal, but datatypes not equal in column {col}"
-                                           f"::{df1[col].dtype}/{df2[col].dtype}.")
+                    return Companda(False, True,
+                                    f"columns and indices equal, but datatypes not equal in column {col}"
+                                    f"::{df1[col].dtype}/{df2[col].dtype}.")
 
         # CHECK FOR DIFFERENT DATATYPES EXPLICITLY
         if is_float_dtype(df1[col]) or is_integer_dtype(df1[col]):
@@ -120,14 +122,17 @@ def companda(df1: pd.DataFrame,
             else:
                 print(df1)
                 print(df2)
-                return Companda(False, f"columns and indices equal; values have different NaN values in {col}.")
+                return Companda(False, True,
+                                f"columns and indices equal; values have different NaN values in {col}.")
             if diff.sum() == 0:
                 continue
             else:
-                return Companda(False, f"columns and indices equal; values not almost equal in column {col}.")
+                return Companda(False, True,
+                                f"columns and indices equal; values not almost equal in column {col}.")
         elif is_datetime64_any_dtype(df1[col]):
             if df1[col].dt.tz != df2[col].dt.tz:
-                return Companda(False, f"unequal timezones: {df1[col].dt.tz}, {df2[col].dt.tz}")
+                return Companda(False, True,
+                                f"unequal timezones: {df1[col].dt.tz}, {df2[col].dt.tz}")
             if pd.np.array_equal(df1[col].isna(),
                                  df2[col].isna()) and pd.np.array_equal(df1[col].dropna().values,
                                                                         df2[col].dropna().values):
@@ -135,7 +140,8 @@ def companda(df1: pd.DataFrame,
             else:
                 print(df1)
                 print(df2)
-                return Companda(False, f"columns and indices equal; datetime values different in {col}.")
+                return Companda(False, True,
+                                f"columns and indices equal; datetime values different in {col}.")
         else:
             if pd.np.array_equal(df1[col].isna(),
                                  df2[col].isna()) and pd.np.array_equal(df1[col].dropna(),
@@ -146,7 +152,7 @@ def companda(df1: pd.DataFrame,
                 for i in range(len(df1)):
                     if df1[col].iloc[i] != df2[col].iloc[i]:
                         print(i, df1[col].iloc[i], df2[col].iloc[i])
-                return Companda(False,
+                return Companda(False, True,
                                 f"columns and indices equal; values not equal in column {col}. {df1[col]} {df2[col]}")
 
-    return Companda(True)
+    return Companda(True, True, f'EQUAL, datatypes checked = {check_dtype}')
