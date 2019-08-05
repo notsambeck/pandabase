@@ -12,6 +12,7 @@ from pandabase.companda import companda
 
 import pytz
 UTC = pytz.utc
+TZ = pytz.timezone('America/Los_Angeles')
 
 
 @pytest.mark.parametrize('df, how', [
@@ -309,7 +310,7 @@ def test_upsert_coerce_float(pandabase_loaded_db, constants):
     """insert an integer into float column"""
     assert pb.has_table(pandabase_loaded_db, constants.TABLE_NAME)
 
-    df = pd.DataFrame(index=[1], columns=['float'], data=[[1.0]])
+    df = pd.DataFrame(index=[1], columns=['float'], data=[[2]])
     df.index.name = constants.SAMPLE_INDEX_NAME
     types = df.dtypes
 
@@ -323,7 +324,8 @@ def test_upsert_coerce_float(pandabase_loaded_db, constants):
         assert types[col] == df.dtypes[col]
 
     loaded = pb.read_sql(constants.TABLE_NAME, con=pandabase_loaded_db)
-    assert loaded.loc[1, 'float'] == 1.0
+    assert loaded.loc[1, 'float'] == 2.0
+    assert isinstance(loaded.loc[1, 'float'], float)
 
 
 @pytest.mark.parametrize('how', ['append', 'upsert'])
@@ -341,7 +343,6 @@ def test_coerce_integer(pandabase_loaded_db, how, constants):
               how='upsert')
 
     for col in df.columns:
-        print(col)
         assert types[col] == df.dtypes[col]
 
     loaded = pb.read_sql(constants.TABLE_NAME, con=pandabase_loaded_db)
@@ -363,6 +364,20 @@ def test_new_column_fails(pandabase_loaded_db, how, constants):
                   con=pandabase_loaded_db,
                   how=how,
                   strict=False)
+
+
+@pytest.mark.xfail
+def test_new_column_all_nan(pandabase_loaded_db, df_with_all_nan_col, constants):
+    """insert into a new column"""
+    assert pb.has_table(pandabase_loaded_db, constants.TABLE_NAME)
+
+    df_with_all_nan_col.index = range(len(df_with_all_nan_col))
+    pb.to_sql(df_with_all_nan_col,
+              table_name=constants.TABLE_NAME,
+              con=pandabase_loaded_db,
+              autoindex=False,
+              how='append',
+              strict=False)
 
 
 @pytest.mark.parametrize('how', ['append', 'upsert'])
@@ -418,6 +433,27 @@ def test_add_fails_invalid_date(pandabase_loaded_db, how, constants):
                   how=how)
 
 
+@pytest.mark.parametrize('how, tz',
+                         [['append', None],
+                          ['upsert', None],
+                          ['append', TZ],
+                          ['upsert', TZ], ]
+                         )
+def test_add_fails_invalid_timezone(pandabase_loaded_db, how, constants, tz):
+    assert pb.has_table(pandabase_loaded_db, constants.TABLE_NAME)
+
+    df = pd.DataFrame(index=range(5),
+                      columns=['date'],
+                      data=pd.date_range('2019-06-06', periods=5, freq='h', tz=tz))
+    print(df.date)
+
+    with pytest.raises(ValueError):
+        pb.to_sql(df,
+                  table_name=constants.TABLE_NAME,
+                  con=pandabase_loaded_db,
+                  how=how)
+
+
 def test_append_autoindex(empty_db, minimal_df):
     """add a new minimal table; add it again"""
     pb.to_sql(minimal_df,
@@ -437,10 +473,11 @@ def test_append_autoindex(empty_db, minimal_df):
     assert pb.has_table(empty_db, 'sample')
     double_df = pd.concat([minimal_df, minimal_df], ignore_index=True)
     assert pb.companda(loaded, double_df, ignore_index=True)
+    assert len(loaded) == len(minimal_df) * 2
 
 
 def test_upsert_autoindex_fails(empty_db, minimal_df):
-    """add a new minimal table; add it again"""
+    """add a new minimal table; add it again as upsert"""
     pb.to_sql(minimal_df,
               table_name='sample',
               con=empty_db,

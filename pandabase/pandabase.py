@@ -88,7 +88,7 @@ def to_sql(df: pd.DataFrame, *,
     ###########################################
     drop_cols, new_cols = None, None
 
-    # 2a. make table from db schema; table will be the reference
+    # 2a. make table from db schema; table will be the reference for datatypes etc.
     if has_table(engine, table_name):
         if how == 'create_only':
             raise NameError(f'Table {table_name} already exists; param "how" is set to "create_only".')
@@ -131,16 +131,17 @@ def to_sql(df: pd.DataFrame, *,
                     df[name] = pd.to_datetime(df[name].values, utc=True)
 
                 elif (
-                        is_integer_dtype(df_col_info['dtype']) and is_float_dtype(db_pandas_dtype)) or (
-                        is_float_dtype(df_col_info['dtype']) and is_integer_dtype(db_pandas_dtype)
+                        df_col_info['dtype'] == Integer and is_float_dtype(db_pandas_dtype)) or (
+                        df_col_info['dtype'] == Float and is_integer_dtype(db_pandas_dtype)
                 ):
-                    print(f'NUMERIC DTYPE: converting df[{name}] from {df[name].dtype} to {db_pandas_dtype}')
+                    # print(f'NUMERIC DTYPE: converting df[{name}] from {df[name].dtype} to {db_pandas_dtype}')
                     df[name] = df[name].astype(db_pandas_dtype)
-                    print(f'new dtypes: {df.dtypes}')
+                    # print(f'new dtypes: {df.dtypes}')
 
                 elif is_string_dtype(df_col_info['dtype']):
-                    print(f'STRING DTYPE: NOT converting df[{name}] from {df[name].dtype} to {db_pandas_dtype}')
+                    # print(f'STRING DTYPE: NOT converting df[{name}] from {df[name].dtype} to {db_pandas_dtype}')
                     # TODO - does this need to happen too?
+                    pass
 
                 else:
                     raise ValueError(
