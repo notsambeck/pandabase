@@ -83,8 +83,8 @@ def to_sql(df: pd.DataFrame, *,
         if is_datetime64_any_dtype(df.index):
             if df.index.tz != pytz.utc:
                 raise ValueError(f'Index {df.index.name} is not UTC. Please correct.')
-            else:
-                print(df.index, 'tzinfo =', df.index.tz)
+            # else:
+                # print(df.index, 'tzinfo =', df.index.tz)
         if df.index.name is None:
             raise NameError('Autoindex is turned off, but df.index.name is None.')
         df.index.name = clean_name(df.index.name)
@@ -95,8 +95,8 @@ def to_sql(df: pd.DataFrame, *,
         if is_datetime64_any_dtype(df[col]):
             if df[col].dt.tz != pytz.utc:
                 raise ValueError(f'Column {col} is not set as UTC. Please correct.')
-            else:
-                print(col, 'tzinfo =', df[col].dt.tz)
+            # else:
+                # print(col, 'tzinfo =', df[col].dt.tz)
 
     # make a list of df columns for later:
     df_cols_dict = make_clean_columns_dict(df, autoindex=autoindex)
@@ -251,14 +251,14 @@ def read_sql(table_name: str,
     for col in table.columns:
         # deal with primary key first; never convert primary key to nullable
         if col.primary_key:
-            print(f'index column is {col.name}')
+            # print(f'index column is {col.name}')
             df.index = df[col.name]
             dtype = get_column_dtype(col, pd_or_sqla='pd', index=True)
             # force all dates to utc
             if is_datetime64_any_dtype(dtype):
-                print(df.index.tz, 'PK - old...')
+                # print(df.index.tz, 'PK - old...')
                 df.index = pd.to_datetime(df[col.name].values, utc=True)
-                print(df.index.tz, 'PK - new')
+                # print(df.index.tz, 'PK - new')
 
             if col.name == PANDABASE_DEFAULT_INDEX:
                 df.index.name = None
@@ -268,13 +268,13 @@ def read_sql(table_name: str,
             df = df.drop(columns=[col.name])
             continue
         else:
-            print(f'non-pk column: {col}')
+            # print(f'non-pk column: {col}')
             dtype = get_column_dtype(col, pd_or_sqla='pd')
             # force all dates to utc
             if is_datetime64_any_dtype(dtype):
-                print(df[col.name].dt.tz, 'regular col - old...')
+                # print(df[col.name].dt.tz, 'regular col - old...')
                 df[col.name] = pd.to_datetime(df[col.name].values, utc=True)
-                print(df[col.name].dt.tz, 'regular col - new')
+                # print(df[col.name].dt.tz, 'regular col - new')
 
         # convert other dtypes to nullable
         if is_bool_dtype(dtype) or is_integer_dtype(dtype):

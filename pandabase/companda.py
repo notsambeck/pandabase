@@ -6,7 +6,7 @@ from pandas.api.types import (
     is_float_dtype,
     is_datetime64_any_dtype,
 )
-from .helpers import get_column_dtype, PANDABASE_DEFAULT_INDEX
+from .helpers import get_column_dtype
 
 
 class CompandaNotEqualError(Exception):
@@ -28,7 +28,7 @@ class Companda(object):
         return self.equal
 
     def __repr__(self):
-        return f'equal: {self.equal}; cols: {self.columns_equal}; {self.message}'
+        return f'COMPANDA: equality: {self.equal}; cols: {self.columns_equal}; {self.message}'
 
 
 def companda(df1: pd.DataFrame,
