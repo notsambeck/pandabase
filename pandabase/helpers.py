@@ -155,18 +155,20 @@ def clean_name(name):
     return str(name).lower().strip().replace(' ', '_')
 
 
-def make_clean_columns_dict(df: pd.DataFrame):
+def make_clean_columns_dict(df: pd.DataFrame, autoindex=False):
     """Take a DataFrame and use_index, return a dictionary {name: {Column info}} (including index or not)"""
     columns = {}
     df.columns = [clean_name(col) for col in df.columns]
 
     # get index info
-    if df.index.name is not None:
+    if df.index.name is not None and not autoindex:
         index_name = clean_name(df.index.name)
+        columns[index_name] = {'dtype': get_column_dtype(df.index, 'sqla', index=True),
+                               'pk': True}
     else:
         index_name = PANDABASE_DEFAULT_INDEX
-    columns[index_name] = {'dtype': get_column_dtype(df.index, 'sqla', index=True),
-                           'pk': True}
+        columns[index_name] = {'dtype': Integer,
+                               'pk': True}
 
     # get column info
     for col_name in df.columns:

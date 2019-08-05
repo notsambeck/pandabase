@@ -28,7 +28,7 @@ class Companda(object):
         return self.equal
 
     def __repr__(self):
-        return f'equal: {self.equal} \n cols: {self.columns_equal} \n {self.message}'
+        return f'equal: {self.equal}; cols: {self.columns_equal}; {self.message}'
 
 
 def companda(df1: pd.DataFrame,
@@ -36,6 +36,7 @@ def companda(df1: pd.DataFrame,
              epsilon=.001,
              check_dtype=False,
              ignore_all_nan_columns=False,
+             ignore_index=False,
              ):
     """compare two DataFrames; return a Companda object that is truth-y or false-y.
 
@@ -45,6 +46,7 @@ def companda(df1: pd.DataFrame,
         epsilon: float (allowable decimal error)
         check_dtype: bool
         ignore_all_nan_columns: ignore any all NaN (i.e. empty) columns
+        ignore_index: ignore values of index
 
     Returns: Companda(True) if and only if:
         1. columns are equal (i.e. both subsets of each other)
@@ -85,16 +87,17 @@ def companda(df1: pd.DataFrame,
     if len(df1) != len(df2):
         return Companda(False, True, f'len(df1) = {len(df1)}, len(df2) = {len(df2)}')
 
-    if df1.index.name != df2.index.name:
-        return Companda(False, True,
-                        f'Different index names: {df1.index.name}, {df2.index.name}')
+    if not ignore_index:
+        if df1.index.name != df2.index.name:
+            return Companda(False, True,
+                            f'Different index names: {df1.index.name}, {df2.index.name}')
 
-    index_unequal = pd.Series(df1.index != df2.index)
-    if index_unequal.sum():
+        index_unequal = pd.Series(df1.index != df2.index)
+        if index_unequal.sum():
 
-        return Companda(False, True,
-                        f'Equal length indices, but {index_unequal.sum()} out of {len(index_unequal)} '
-                        f'index values are different. {df1.index} / {df2.index}')
+            return Companda(False, True,
+                            f'Equal length indices, but {index_unequal.sum()} out of {len(index_unequal)} '
+                            f'index values are different. {df1.index} / {df2.index}')
 
     # VALUES
     for col in df1.columns:
@@ -148,11 +151,11 @@ def companda(df1: pd.DataFrame,
                                                                         df2[col].dropna()):
                 continue
             else:
-                print(f'Unequal values follow from {col}')
+                print(f'Unequal values in column {col}:')
                 for i in range(len(df1)):
                     if df1[col].iloc[i] != df2[col].iloc[i]:
                         print(i, df1[col].iloc[i], df2[col].iloc[i])
                 return Companda(False, True,
                                 f"columns and indices equal; values not equal in column {col}. {df1[col]} {df2[col]}")
 
-    return Companda(True, True, f'EQUAL, datatypes checked = {check_dtype}')
+    return Companda(True, True, f'EQUAL, checked_dtype={check_dtype}, ignore_index={ignore_index}')

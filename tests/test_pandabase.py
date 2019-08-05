@@ -416,3 +416,39 @@ def test_add_fails_invalid_date(pandabase_loaded_db, how, constants):
                   table_name=constants.TABLE_NAME,
                   con=pandabase_loaded_db,
                   how=how)
+
+
+def test_append_autoindex(empty_db, minimal_df):
+    """add a new minimal table; add it again"""
+    pb.to_sql(minimal_df,
+              table_name='sample',
+              con=empty_db,
+              autoindex=True,
+              how='create_only')
+    table2 = pb.to_sql(minimal_df,
+                       table_name='sample',
+                       con=empty_db,
+                       autoindex=True,
+                       how='append')
+
+    assert table2.columns[PANDABASE_DEFAULT_INDEX].primary_key
+    loaded = pb.read_sql('sample', con=empty_db)
+
+    assert pb.has_table(empty_db, 'sample')
+    double_df = pd.concat([minimal_df, minimal_df], ignore_index=True)
+    assert pb.companda(loaded, double_df, ignore_index=True)
+
+
+def test_upsert_autoindex_fails(empty_db, minimal_df):
+    """add a new minimal table; add it again"""
+    pb.to_sql(minimal_df,
+              table_name='sample',
+              con=empty_db,
+              autoindex=True,
+              how='create_only')
+    with pytest.raises(IOError):
+        table2 = pb.to_sql(minimal_df,
+                           table_name='sample',
+                           con=empty_db,
+                           autoindex=True,
+                           how='upsert')
