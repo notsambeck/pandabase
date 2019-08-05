@@ -110,7 +110,9 @@ def test_create_table_no_index_load_pandas(empty_db, minimal_df):
     table = pb.to_sql(minimal_df,
                       table_name='sample',
                       con=empty_db,
-                      how='create_only')
+                      how='create_only',
+                      autoindex=True,
+                      )
 
     # print(table.columns)
     assert table.columns[PANDABASE_DEFAULT_INDEX].primary_key
@@ -122,7 +124,7 @@ def test_create_table_no_index_load_pandas(empty_db, minimal_df):
     # pandas doesn't know stored as UTC w/o timezone info
     loaded.date = pd.to_datetime(loaded.date, utc=True)
 
-    assert pb.companda(loaded, minimal_df)
+    assert pb.companda(loaded, minimal_df, ignore_index=True)
 
 
 def test_create_read_table_no_index(empty_db, minimal_df):
@@ -130,14 +132,16 @@ def test_create_read_table_no_index(empty_db, minimal_df):
     table = pb.to_sql(minimal_df,
                       table_name='sample',
                       con=empty_db,
-                      how='create_only')
+                      how='create_only',
+                      autoindex=True,
+                      )
 
     # print(table.columns)
     assert table.columns[PANDABASE_DEFAULT_INDEX].primary_key
     loaded = pb.read_sql('sample', con=empty_db)
 
     assert pb.has_table(empty_db, 'sample')
-    assert pb.companda(loaded, minimal_df)
+    assert pb.companda(loaded, minimal_df, ignore_index=True)
 
 
 def test_create_read_table_index(session_db, simple_df, constants):
@@ -358,26 +362,25 @@ def test_new_column_fails(pandabase_loaded_db, how, constants):
     df.index.name = constants.SAMPLE_INDEX_NAME
     assert df.loc[101, 'new_column'] == 1.1
 
-    with pytest.raises(ValueError):
+    with pytest.raises(NameError):
         pb.to_sql(df,
                   table_name=constants.TABLE_NAME,
                   con=pandabase_loaded_db,
-                  how=how,
-                  strict=False)
+                  how=how, )
 
 
-@pytest.mark.xfail
 def test_new_column_all_nan(pandabase_loaded_db, df_with_all_nan_col, constants):
     """insert into a new column"""
     assert pb.has_table(pandabase_loaded_db, constants.TABLE_NAME)
 
-    df_with_all_nan_col.index = range(len(df_with_all_nan_col))
+    df_with_all_nan_col.index = range(100,100+len(df_with_all_nan_col))
+    df_with_all_nan_col.index.name = constants.SAMPLE_INDEX_NAME
+
     pb.to_sql(df_with_all_nan_col,
               table_name=constants.TABLE_NAME,
               con=pandabase_loaded_db,
               autoindex=False,
-              how='append',
-              strict=False)
+              how='append', )
 
 
 @pytest.mark.parametrize('how', ['append', 'upsert'])
@@ -385,9 +388,9 @@ def test_add_fails_wrong_index_name(pandabase_loaded_db, how, constants):
     assert pb.has_table(pandabase_loaded_db, constants.TABLE_NAME)
 
     df = pd.DataFrame(index=[1], columns=['date'], data=[['x']])
-    df.index_name = 'not_a_real_name'
+    df.index.name = 'not_a_real_name'
 
-    with pytest.raises(ValueError):
+    with pytest.raises(NameError):
         pb.to_sql(df,
                   table_name=constants.TABLE_NAME,
                   con=pandabase_loaded_db,
@@ -399,8 +402,9 @@ def test_upsert_fails_invalid_float(pandabase_loaded_db, how, constants):
     assert pb.has_table(pandabase_loaded_db, constants.TABLE_NAME)
 
     df = pd.DataFrame(index=[1], columns=['float'], data=[['x']])
+    df.index.name = constants.SAMPLE_INDEX_NAME
 
-    with pytest.raises(ValueError):
+    with pytest.raises(TypeError):
         pb.to_sql(df,
                   table_name=constants.TABLE_NAME,
                   con=pandabase_loaded_db,
@@ -411,9 +415,10 @@ def test_upsert_fails_invalid_float(pandabase_loaded_db, how, constants):
 def test_upsert_fails_invalid_bool(pandabase_loaded_db, how, constants):
     assert pb.has_table(pandabase_loaded_db, constants.TABLE_NAME)
 
-    df = pd.DataFrame(index=[1], columns=['bool'], data=[['x']])
+    df = pd.DataFrame(index=[1], columns=['boolean'], data=[['x']])
+    df.index.name = constants.SAMPLE_INDEX_NAME
 
-    with pytest.raises(ValueError):
+    with pytest.raises(TypeError):
         pb.to_sql(df,
                   table_name=constants.TABLE_NAME,
                   con=pandabase_loaded_db,
@@ -425,6 +430,7 @@ def test_add_fails_invalid_date(pandabase_loaded_db, how, constants):
     assert pb.has_table(pandabase_loaded_db, constants.TABLE_NAME)
 
     df = pd.DataFrame(index=[1], columns=['date'], data=[['x']])
+    df.index.name = constants.SAMPLE_INDEX_NAME
 
     with pytest.raises(ValueError):
         pb.to_sql(df,
@@ -445,6 +451,8 @@ def test_add_fails_invalid_timezone(pandabase_loaded_db, how, constants, tz):
     df = pd.DataFrame(index=range(5),
                       columns=['date'],
                       data=pd.date_range('2019-06-06', periods=5, freq='h', tz=tz))
+    df.index.name = constants.SAMPLE_INDEX_NAME
+
     print(df.date)
 
     with pytest.raises(ValueError):

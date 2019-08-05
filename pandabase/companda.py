@@ -92,6 +92,10 @@ def companda(df1: pd.DataFrame,
             return Companda(False, True,
                             f'Different index names: {df1.index.name}, {df2.index.name}')
 
+        # coerce index dtype if we're not checking this
+        # if not check_dtype:
+        #     df1.index = df1.index.astype(type(df2.index))
+
         index_unequal = pd.Series(df1.index != df2.index)
         if index_unequal.sum():
 
