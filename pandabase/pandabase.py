@@ -67,7 +67,9 @@ def to_sql(df: pd.DataFrame, *,
     engine = engine_builder(con)
     meta = sqa.MetaData()
 
-    # 2. validate inputs
+    ######################
+    # 2. validate inputs #
+    ######################
     if how not in ('create_only', 'append', 'upsert',):
         raise ValueError(f"{how} is not a valid value for parameter: 'how'")
 
@@ -83,7 +85,7 @@ def to_sql(df: pd.DataFrame, *,
             if df.index.tz != pytz.utc:
                 raise ValueError(f'Index {df.index.name} is not UTC. Please correct.')
             # else:
-                # print(df.index, 'tzinfo =', df.index.tz)
+            # print(df.index, 'tzinfo =', df.index.tz)
         if df.index.name is None:
             raise NameError('Autoindex is turned off, but df.index.name is None.')
         df.index.name = clean_name(df.index.name)
@@ -95,20 +97,22 @@ def to_sql(df: pd.DataFrame, *,
             if df[col].dt.tz != pytz.utc:
                 raise ValueError(f'Column {col} is not set as UTC. Please correct.')
             # else:
-                # print(col, 'tzinfo =', df[col].dt.tz)
+            # print(col, 'tzinfo =', df[col].dt.tz)
 
     # make a list of df columns for later:
     df_cols_dict = make_clean_columns_dict(df, autoindex=autoindex)
 
-    ###########################################
-    # 3a. Make new Tble from df info if needed
+    #############################################
+    # 3a. Make new Table from df info if needed #
+    #############################################
     if not has_table(engine, table_name):
         logging.info(f'Creating new table {table_name}')
         table = Table(table_name, meta,
                       *[make_column(name, info) for name, info in df_cols_dict.items()
                         if info['dtype'] is not None])
-
-    # 3b. Or make Table from db schema; DB will be the source of truth for datatypes etc.
+    #######################################################################################
+    # 3b. Or make Table from db schema; DB will be the source of truth for datatypes etc. #
+    #######################################################################################
     else:
         if how == 'create_only':
             raise NameError(f'Table {table_name} already exists; param "how" is set to "create_only".')
@@ -132,8 +136,8 @@ def to_sql(df: pd.DataFrame, *,
             # check that dtypes and PKs match for existing columns
             col = table.columns[col_name]
             if col.primary_key != df_col_info['pk']:
-                raise ValueError(f'Inconsistent pk for col: {col_name}! db: {col.primary_key} / '
-                                 f'df: {df_col_info["pk"]}')
+                raise NameError(f'Inconsistent pk for col: {col_name}! db: {col.primary_key} / '
+                                f'df: {df_col_info["pk"]}')
 
             db_sqla_dtype = get_column_dtype(col, pd_or_sqla='sqla')
 
@@ -141,7 +145,9 @@ def to_sql(df: pd.DataFrame, *,
             if db_sqla_dtype == df_col_info['dtype']:
                 continue
 
-            # 3d. COERCE BAD DATATYPES case by case
+            ############################################
+            # 3d. COERCE BAD DATATYPES - case by case #
+            ############################################
             db_pandas_dtype = get_column_dtype(col, pd_or_sqla='pd')
 
             if df_col_info['dtype'] is None:
@@ -157,50 +163,31 @@ def to_sql(df: pd.DataFrame, *,
                 # print(f'NUMERIC DTYPE: converting df[{name}] from {df[name].dtype} to {db_pandas_dtype}')
                 df[col_name] = df[col_name].astype(db_pandas_dtype)
                 # print(f'new dtypes: {df.dtypes}')
-
-            elif is_string_dtype(df_col_info['dtype']):
-                if db_sqla_dtype is Boolean:
-                    for val in df[col_name].unique():
-                        if val not in [0, 1, True, False, None, 1.0, 0.0, pd.np.NaN, pd.NaT,
-                                       '0', '1', 'True', 'False', '1.0', '0.0', 'None']:
-                            raise TypeError('Cannot coerce arbitrary strings to boolean')
-                try:
-                    df[col_name] = df[col_name].astype(db_pandas_dtype)
-                    print(f'Pandabase coerced a {df_col_info["dtype"]} to a {db_pandas_dtype}')
-                    print(df[col_name])
-                except TypeError:
-                    raise TypeError(f'pandabase failed to coerce "object" in df[{col}] to {db_pandas_dtype}')
-                except ValueError:
-                    raise TypeError(f'pandabase failed to coerce "object" in df[{col}] to {db_pandas_dtype}')
             else:
-                raise ValueError(
+                raise TypeError(
                     f'Inconsistent type for col: {col_name}.'
                     f'db: {db_pandas_dtype} /'
                     f'df: {df_col_info["dtype"]}')
 
-    ###############################################################
+    #######################################################
+    # FINALLY: either insert/fail, append/fail, or upsert #
+    #######################################################
 
     # print('DB connection begins...')
     with engine.begin() as con:
         meta.create_all(bind=con)
 
-    # print(df)
-
-    ######################################################
-    # FINALLY: either insert/fail, append/fail, or upsert
-
     if how in ['append', 'create_only']:
         # will raise IntegrityError if repeated index encountered
         with engine.begin() as con:
             rows = []
+            df = df.dropna(axis=1, how='all')
             if not autoindex:
                 for index, row in df.iterrows():
-                    # append row
                     rows.append({**row.to_dict(), df.index.name: index})
                 con.execute(table.insert(), rows)
             else:
                 for index, row in df.iterrows():
-                    # append row
                     rows.append({**row.to_dict()})
                 con.execute(table.insert(), rows)
 
@@ -289,6 +276,7 @@ def read_sql(table_name: str,
 
 def add_columns_to_db(new_cols, table_name, con):
     # Make any new columns as needed with ALTER TABLE
+    # TODO: actually implement this? or rule it out
     engine = engine_builder(con)
 
     for new_col in new_cols:

@@ -161,8 +161,10 @@ def make_clean_columns_dict(df: pd.DataFrame, autoindex=False):
     df.columns = [clean_name(col) for col in df.columns]
 
     # get index info
-    if df.index.name is not None and not autoindex:
+    if not autoindex:
         index_name = clean_name(df.index.name)
+        if df.index.name in df.columns:
+            raise NameError(f'index column name is duplicate of column name: {df.index.name}')
         columns[index_name] = {'dtype': get_column_dtype(df.index, 'sqla', index=True),
                                'pk': True}
     else:

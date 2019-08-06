@@ -172,6 +172,24 @@ def test_overwrite_table_fails(pandabase_loaded_db, simple_df, how, constants):
                   how=how)
 
 
+@pytest.mark.parametrize('unique_index_name', [True, False])
+def test_append_bad_pk_fails(pandabase_loaded_db, simple_df, constants, unique_index_name):
+    """Try to append rows with conflicting index columns"""
+    table_name = constants.TABLE_NAME
+    assert pb.has_table(pandabase_loaded_db, table_name)
+
+    simple_df.index = simple_df['integer']
+    if unique_index_name:
+        simple_df[constants.SAMPLE_INDEX_NAME] = simple_df.integer
+        simple_df = simple_df.drop('integer', axis=1)
+
+    with pytest.raises(NameError):
+        pb.to_sql(simple_df,
+                  table_name=table_name,
+                  con=pandabase_loaded_db,
+                  how='append')
+
+
 @pytest.mark.parametrize('table_name, index_col_name', [['integer_index_table', 'integer'],
                                                         ['float_index_table', 'float'],
                                                         ['datetime_index_table', 'date'], ])
@@ -411,18 +429,63 @@ def test_upsert_fails_invalid_float(pandabase_loaded_db, how, constants):
                   how=how)
 
 
+def test_autoindex_add_valid_bool(minimal_df, empty_db, constants):
+    pb.to_sql(minimal_df,
+              table_name=constants.TABLE_NAME,
+              con=empty_db,
+              how='create_only',
+              autoindex=True, )
+    assert pb.has_table(empty_db, constants.TABLE_NAME)
+
+    df = pd.DataFrame(index=[101, 102, 103],
+                      columns=['boolean'],
+                      data=[True, False, None])
+
+    pb.to_sql(df,
+              table_name=constants.TABLE_NAME,
+              con=empty_db,
+              how='append',
+              autoindex=True, )
+
+    df = pb.read_sql(constants.TABLE_NAME, con=empty_db)
+
+    # Int64Dtype is a fine way to store nullable boolean values
+    # Stored in database as boolean or NULL so the data can only be 0, 1, or None
+    assert is_bool_dtype(df.boolean) or is_integer_dtype(df.boolean)
+
+    # assume values were loaded in order:
+    x = len(df)
+    assert df.loc[x - 2, 'boolean']
+    assert not df.loc[x - 1, 'boolean']
+    assert pd.np.isnan(df.loc[x, 'boolean'])
+    with pytest.raises(KeyError):
+        _ = df.loc[x + 1, 'boolean']
+
+
 @pytest.mark.parametrize('how', ['upsert', 'append'])
-def test_upsert_fails_invalid_bool(pandabase_loaded_db, how, constants):
+def test_upsert_valid_bool(pandabase_loaded_db, how, constants):
     assert pb.has_table(pandabase_loaded_db, constants.TABLE_NAME)
 
-    df = pd.DataFrame(index=[1], columns=['boolean'], data=[['x']])
+    df = pd.DataFrame(index=[101, 102, 103],
+                      columns=['boolean'],
+                      data=[True, False, None])
     df.index.name = constants.SAMPLE_INDEX_NAME
 
-    with pytest.raises(TypeError):
-        pb.to_sql(df,
-                  table_name=constants.TABLE_NAME,
-                  con=pandabase_loaded_db,
-                  how=how)
+    pb.to_sql(df,
+              table_name=constants.TABLE_NAME,
+              con=pandabase_loaded_db,
+              how=how)
+
+    df = pb.read_sql(constants.TABLE_NAME, con=pandabase_loaded_db)
+
+    # Int64Dtype is a fine way to store nullable boolean values
+    # Stored in database as boolean or NULL so the data can only be 0, 1, or None
+    assert is_bool_dtype(df.boolean) or is_integer_dtype(df.boolean)
+    assert df.loc[101, 'boolean']
+    assert not df.loc[102, 'boolean']
+    assert pd.np.isnan(df.loc[103, 'boolean'])
+    with pytest.raises(KeyError):
+        _ = df.loc[104, 'boolean']
 
 
 @pytest.mark.parametrize('how', ['append', 'upsert'])
@@ -497,3 +560,19 @@ def test_upsert_autoindex_fails(empty_db, minimal_df):
                            con=empty_db,
                            autoindex=True,
                            how='upsert')
+
+
+@pytest.mark.parametrize('actually_do', [True, False])
+def test_add_column_to_database(pandabase_loaded_db, actually_do, constants):
+    """possibly add new column to db"""
+    name = 'a_new_column'
+    col = sqa.Column(name, primary_key=False, type_=Integer, nullable=True)
+    if actually_do:
+        pb.add_columns_to_db([col], table_name=constants.TABLE_NAME, con=pandabase_loaded_db)
+    df = pb.read_sql(table_name=constants.TABLE_NAME, con=pandabase_loaded_db)
+
+    if actually_do:
+        assert name in df.columns
+        assert is_integer_dtype(df[name])
+    else:
+        assert name not in df.columns
