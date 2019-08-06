@@ -12,7 +12,11 @@ from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean
 
 # fake random index name in case of not explicitly indexed data
 PANDABASE_DEFAULT_INDEX = 'pandabase_default_index_237856037524875'
-
+lookup = {Integer: pd.Int64Dtype(),
+          Float: np.float64,
+          DateTime: np.datetime64,
+          Boolean: np.bool_,
+          String: np.str_}
 
 def series_is_boolean(col: pd.Series or pd.Index):
     """returns:
@@ -122,7 +126,7 @@ def get_column_dtype(column, pd_or_sqla, index=False):
     elif isinstance(column, (pd.Series, pd.Index)):
         datatype = _get_type_from_df_col(column, index=index)
     else:
-        raise ValueError(f'Expected some kind of a column, got {type(column)}')
+        raise ValueError(f'get_column_datatype takes a column; got {type(column)}')
 
     if datatype is None:
         return None
@@ -130,16 +134,12 @@ def get_column_dtype(column, pd_or_sqla, index=False):
     elif pd_or_sqla == 'sqla':
         return datatype
     elif pd_or_sqla == 'pd':
+        local_lookup = lookup.copy()
         if index:
-            int_type = int
-        else:
-            int_type = pd.Int64Dtype()
-        lookup = {Integer: int_type,
-                  Float: np.float64,
-                  DateTime: np.datetime64,
-                  Boolean: np.bool_,
-                  String: np.str_}
-        return lookup[datatype]
+            # for index use non-nullable int i.e. int
+            local_lookup[Integer] = int
+
+        return local_lookup[datatype]
     else:
         raise ValueError(f'Select pd_or_sqla must equal either "pd" or "sqla"')
 

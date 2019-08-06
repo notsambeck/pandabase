@@ -26,7 +26,7 @@ import pandas as pd
 from pandas.api.types import is_string_dtype
 
 import sqlalchemy as sqa
-from sqlalchemy import Table
+from sqlalchemy import Table, and_
 from sqlalchemy.exc import IntegrityError
 import pytz
 import logging
@@ -192,10 +192,9 @@ def to_sql(df: pd.DataFrame, *,
                 con.execute(table.insert(), rows)
 
     elif how == 'upsert':
-        for index, row in df.iterrows():
-            # check index uniqueness by attempting insert; if it fails, update
-            with engine.begin() as con:
-                row[row.isna()] = None
+        with engine.begin() as con:
+            for index, row in df.iterrows():
+                # check index uniqueness by attempting insert; if it fails, update
                 row = {**row.dropna().to_dict(), df.index.name: index}
                 try:
                     insert = table.insert().values(row)
@@ -211,12 +210,16 @@ def to_sql(df: pd.DataFrame, *,
 
 
 def read_sql(table_name: str,
-             con: str or sqa.engine, ):
+             con: str or sqa.engine,
+             *,
+             lowest=None, highest=None):
     """
     Read in a table from con as a pd.DataFrame, preserving dtypes and primary keys
 
     :param table_name: str
     :param con: db connectable
+    :param lowest: minimum index value to select (inclusive)
+    :param highest: maximum index value to select (inclusive)
     """
     engine = engine_builder(con)
     meta = sqa.MetaData(bind=engine)
@@ -224,13 +227,26 @@ def read_sql(table_name: str,
 
     if len(table.primary_key.columns) == 0:
         print('no index')
+        assert lowest is None
+        assert highest is None
     elif len(table.primary_key.columns) != 1:
         raise NotImplementedError('pandabase is not compatible with multi-index tables')
+    else:
+        pk = table.primary_key.columns.items()[0][1]
+        print(pk)
 
-    result = engine.execute(table.select())
+    if lowest is None and highest is None:
+        result = engine.execute(table.select())
+    else:
+        s = table.select().where(and_(pk >= lowest,
+                                      pk <= highest))
+        result = engine.execute(s)
 
     data = result.fetchall()
-    # TODO: add range limit parameters
+    if len(data) == 0:
+        if not isinstance(lowest, pk.type.python_type):
+            raise TypeError(f'Select range is: {lowest} <= data <= {highest}; type of column is {pk.type}')
+
     df = pd.DataFrame.from_records(data, columns=[col.name for col in table.columns],
                                    coerce_float=True)
 
@@ -276,7 +292,6 @@ def read_sql(table_name: str,
 
 def add_columns_to_db(new_cols, table_name, con):
     # Make any new columns as needed with ALTER TABLE
-    # TODO: actually implement this? or rule it out
     engine = engine_builder(con)
 
     for new_col in new_cols:

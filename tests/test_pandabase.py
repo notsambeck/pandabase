@@ -81,7 +81,7 @@ def test_read_pandas_table_pandas(pandabase_loaded_db, simple_df, constants):
     assert companda(loaded_df, simple_df)
 
 
-def test_read_pandas_table(pandas_loaded_db, simple_df, constants):
+def test_select_pandas_table(pandas_loaded_db, simple_df, constants):
     """using pandabase.read_sql:
     read pandas-written table containing simple_df,
 
@@ -144,7 +144,7 @@ def test_create_read_table_no_index(empty_db, minimal_df):
     assert pb.companda(loaded, minimal_df, ignore_index=True)
 
 
-def test_create_read_table_index(session_db, simple_df, constants):
+def test_create_select_table_index(session_db, simple_df, constants):
     """add a new table with explicit index, read it back with pandabase, check equality"""
     table = pb.to_sql(simple_df,
                       table_name='sample',
@@ -157,6 +157,69 @@ def test_create_read_table_index(session_db, simple_df, constants):
 
     loaded = pb.read_sql('sample', con=session_db)
     assert pb.companda(loaded, simple_df, ignore_all_nan_columns=True)
+
+
+def test_create_select_table_range_int_index(empty_db, simple_df, constants):
+    """add a new table with explicit index, read it back with pandabase, check equality"""
+    table = pb.to_sql(simple_df,
+                      table_name='sample',
+                      con=empty_db,
+                      how='create_only')
+
+    # print(table.columns)
+    assert table.columns[constants.SAMPLE_INDEX_NAME].primary_key
+    assert pb.has_table(empty_db, 'sample')
+
+    loaded0 = pb.read_sql('sample', con=empty_db, lowest=1, highest=0)
+    print(loaded0)
+    assert len(loaded0) == 0
+
+    loaded = pb.read_sql('sample', con=empty_db,
+                         lowest=simple_df.index[0],
+                         highest=simple_df.index[-1])
+    assert pb.companda(loaded, simple_df, ignore_all_nan_columns=True)
+
+
+def test_create_select_table_range_datetime_index(empty_db, simple_df, constants):
+    """add a new table with explicit index, read it back with pandabase, check equality"""
+    simple_df.index = simple_df.date
+    simple_df = simple_df.drop('date', axis=1)
+
+    table = pb.to_sql(simple_df,
+                      table_name='sample',
+                      con=empty_db,
+                      how='create_only')
+
+    # print(table.columns)
+    assert table.columns['date'].primary_key
+    assert pb.has_table(empty_db, 'sample')
+
+    loaded0 = pb.read_sql('sample', con=empty_db,
+                          lowest=simple_df.index[-1],
+                          highest=simple_df.index[0])
+    print(loaded0)
+    assert len(loaded0) == 0
+
+    loaded = pb.read_sql('sample', con=empty_db,
+                         lowest=simple_df.index[0],
+                         highest=simple_df.index[-1])
+    assert pb.companda(loaded, simple_df, ignore_all_nan_columns=True)
+
+
+def test_select_table_range_fails_different_index(empty_db, simple_df, constants):
+    """add a new table with explicit index, read it back with pandabase, check equality"""
+    simple_df.index = simple_df.date
+    simple_df = simple_df.drop('date', axis=1)
+
+    table = pb.to_sql(simple_df,
+                      table_name='sample',
+                      con=empty_db,
+                      how='create_only')
+
+    with pytest.raises(TypeError):
+        _ = pb.read_sql('sample', con=empty_db,
+                        lowest=0,
+                        highest=12)
 
 
 @pytest.mark.parametrize('how', ['create_only', 'append'])
