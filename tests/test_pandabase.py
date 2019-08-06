@@ -611,7 +611,7 @@ def test_append_autoindex(empty_db, minimal_df):
 
 
 def test_upsert_autoindex_fails(empty_db, minimal_df):
-    """add a new minimal table; add it again as upsert"""
+    """add a new minimal table w/o index; trying to add again should fail"""
     pb.to_sql(minimal_df,
               table_name='sample',
               con=empty_db,

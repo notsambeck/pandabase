@@ -106,17 +106,10 @@ def companda(df1: pd.DataFrame,
     # VALUES
     for col in df1.columns:
         # datatype checks
-        if check_dtype:
-            try:
-                if not df1[col].dtype == df2[col].dtype:
-                    return Companda(False, True,
-                                    f"columns and indices equal, but datatypes not equal:{col}"
-                                    f"::{df1[col].dtype}/{df2[col].dtype}.")
-            except TypeError:
-                if not df1[col].dtype is df2[col].dtype:
-                    return Companda(False, True,
-                                    f"columns and indices equal, but datatypes not equal in column {col}"
-                                    f"::{df1[col].dtype}/{df2[col].dtype}.")
+        if check_dtype and not df1[col].dtype is df2[col].dtype:
+            return Companda(False, True,
+                            f"columns and indices equal, but datatypes not equal in column {col}"
+                            f"::{df1[col].dtype}/{df2[col].dtype}.")
 
         # CHECK FOR DIFFERENT DATATYPES EXPLICITLY
         if is_float_dtype(df1[col]) or is_integer_dtype(df1[col]):
