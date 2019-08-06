@@ -61,7 +61,6 @@ def to_sql(df: pd.DataFrame, *,
             if record exists: update
             else: insert
     """
-    ##########################################
     # 1. make connection objects
     df = df.copy()
 
@@ -241,7 +240,7 @@ def read_sql(table_name: str,
     elif len(table.primary_key.columns) != 1:
         raise NotImplementedError('pandabase is not compatible with multi-index tables')
 
-    result = con.execute(table.select())
+    result = engine.execute(table.select())
 
     data = result.fetchall()
     # TODO: add range limit parameters
