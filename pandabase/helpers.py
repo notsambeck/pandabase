@@ -18,6 +18,7 @@ lookup = {Integer: pd.Int64Dtype(),
           Boolean: np.bool_,
           String: np.str_}
 
+
 def series_is_boolean(col: pd.Series or pd.Index):
     """returns:
     None if column is all None;
@@ -82,7 +83,15 @@ def _get_type_from_df_col(col: pd.Series, index: bool):
     elif not index and series_is_boolean(col):
         return Boolean
     elif is_integer_dtype(col):
-        return Integer
+        # parse purported 'integer' columns in a new table.
+        # if values are all zero, make it a float for added safety - common case of a float that is often zero
+        # if database table is type INTEGER, this will be parsed back to int later anyway
+        if index:
+            return Integer
+        for val in col.unique():
+            if val != 0:
+                return Integer
+        return Float
     elif is_float_dtype(col):
         return Float
     elif is_datetime64_any_dtype(col):
@@ -151,8 +160,12 @@ def has_table(con, table_name):
 
 
 def clean_name(name):
-    """returns a standardized version of column names: lower case without spaces"""
-    return str(name).lower().strip().replace(' ', '_')
+    """returns a standardized version of column names: lower case without spaces or special characters"""
+    d = {char: '_' for char in ' ()+-/*";=&|#><^%{}'}
+    d['.'] = None
+    d[','] = None
+    table = str.maketrans(d)
+    return str(name).lower().strip().translate(table)
 
 
 def make_clean_columns_dict(df: pd.DataFrame, autoindex=False):

@@ -58,3 +58,12 @@ def test_series_is_boolean(series, expected):
     assert isinstance(series, pd.Series)
     print(series)
     assert series_is_boolean(series) == expected
+
+
+@pytest.mark.parametrize('name, cleaned', [['abc', 'abc'],
+                                           ['a b c', 'a_b_c'],
+                                           ['(a{b}c)', '_a_b_c_'],
+                                           ['aaa-', 'aaa_'],
+                                           ['weather_33.68_-117.87', 'weather_3368__11787']])
+def test_clean_name(name, cleaned):
+    assert clean_name(name) == cleaned

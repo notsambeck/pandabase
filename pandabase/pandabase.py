@@ -72,6 +72,10 @@ def to_sql(df: pd.DataFrame, *,
     ######################
     # 2. validate inputs #
     ######################
+    clean_table_name = clean_name(table_name)
+    if clean_table_name != table_name:
+        raise NameError(f'Illegal characters in table name: {table_name}. try: {clean_table_name}')
+
     if how not in ('create_only', 'append', 'upsert',):
         raise ValueError(f"{how} is not a valid value for parameter: 'how'")
 
@@ -86,10 +90,8 @@ def to_sql(df: pd.DataFrame, *,
         if is_datetime64_any_dtype(df.index):
             if df.index.tz != pytz.utc:
                 raise ValueError(f'Index {df.index.name} is not UTC. Please correct.')
-            # else:
-            # print(df.index, 'tzinfo =', df.index.tz)
         if df.index.name is None:
-            raise NameError('Autoindex is turned off, but df.index.name is None.')
+            raise NameError('Autoindex is turned off, but df.index.name is None. Please correct.')
         df.index.name = clean_name(df.index.name)
     else:
         df.index.name = PANDABASE_DEFAULT_INDEX
@@ -236,23 +238,31 @@ def read_sql(table_name: str,
         print('no index')
         assert lowest is None
         assert highest is None
-    elif len(table.primary_key.columns) != 1:
-        raise NotImplementedError('pandabase is not compatible with multi-index tables')
-    else:
-        pk = table.primary_key.columns.items()[0][1]
-        print(pk)
-
-    if lowest is None and highest is None:
         result = engine.execute(table.select())
-    else:
-        s = table.select().where(and_(pk >= lowest,
-                                      pk <= highest))
-        result = engine.execute(s)
+        data = result.fetchall()
 
-    data = result.fetchall()
-    if len(data) == 0:
-        if not isinstance(lowest, pk.type.python_type):
-            raise TypeError(f'Select range is: {lowest} <= data <= {highest}; type of column is {pk.type}')
+    elif len(table.primary_key.columns) == 1:
+        pk = table.primary_key.columns.items()[0][1]
+
+        if highest is None:
+            if lowest is None:
+                s = table.select()
+            else:
+                s = table.select().where(pk >= lowest)
+        else:
+            if lowest is None:
+                s = table.select().where(pk <= highest)
+            else:
+                s = table.select().where(and_(pk >= lowest,
+                                              pk <= highest))
+        result = engine.execute(s)
+        data = result.fetchall()
+
+        if len(data) == 0:
+            if not isinstance(lowest, pk.type.python_type) or not isinstance(highest, pk.type.python_type):
+                raise TypeError(f'Select range is: {lowest} <= data <= {highest}; type of column is {pk.type}')
+    else:
+        raise NotImplementedError('pandabase is not compatible with multi-index tables')
 
     df = pd.DataFrame.from_records(data, columns=[col.name for col in table.columns],
                                    coerce_float=True)
@@ -300,7 +310,8 @@ def read_sql(table_name: str,
 def add_columns_to_db(new_col, table_name, con):
     # Make any new columns as needed with ALTER TABLE
     engine = engine_builder(con)
+    name = clean_name(new_col.name)
 
     with engine.begin() as conn:
         conn.execute(f'ALTER TABLE {table_name} '
-                     f'ADD COLUMN {new_col.name} {new_col.type.compile(engine.dialect)}')
+                     f'ADD COLUMN {name} {new_col.type.compile(engine.dialect)}')
