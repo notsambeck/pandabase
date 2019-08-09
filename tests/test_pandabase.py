@@ -391,6 +391,66 @@ def test_upsert_incomplete_rows(pandabase_loaded_db, constants):
     assert companda(df, loaded)
 
 
+def test_upsert_individual_values1(pandabase_loaded_db, constants):
+    """upsert to update rows with only 1 of 5 values (and index) from full dataframe"""
+    assert pb.has_table(pandabase_loaded_db, constants.TABLE_NAME)
+
+    df = pb.read_sql(constants.TABLE_NAME, con=pandabase_loaded_db)
+    df2 = pd.DataFrame(index=df.index, columns=df.columns)
+    for col in df2.columns:
+        df2[col] = df2[col].astype(df[col].dtype)
+
+    df2.loc[df2.index[0], 'float'] = 9.9
+    df2.loc[df2.index[1], 'integer'] = 999
+    df2.loc[df2.index[2], 'string'] = 'nah'
+    df2.loc[df2.index[3], 'date'] = pd.to_datetime('1968-01-01', utc=True)
+
+    pb.to_sql(df2,
+              table_name=constants.TABLE_NAME,
+              con=pandabase_loaded_db,
+              how='upsert')
+
+    # check against pandabase read
+    loaded = pb.read_sql(constants.TABLE_NAME, con=pandabase_loaded_db)
+
+    df.loc[df.index[0], 'float'] = 9.9
+    df.loc[df.index[1], 'integer'] = 999
+    df.loc[df.index[2], 'string'] = 'nah'
+    df.loc[df.index[3], 'date'] = pd.to_datetime('1968-01-01', utc=True)
+
+    assert companda(df, loaded)
+
+
+def test_upsert_individual_values2(pandabase_loaded_db, constants):
+    """upsert to update rows with only 1 of 5 values (and index) from incomplete DataFrame"""
+    assert pb.has_table(pandabase_loaded_db, constants.TABLE_NAME)
+
+    df = pb.read_sql(constants.TABLE_NAME, con=pandabase_loaded_db)
+    df2 = pd.DataFrame(index=df.index, columns=df.columns)
+    for col in df2.columns:
+        df2[col] = df2[col].astype(df[col].dtype)
+
+    df2.loc[df2.index[0], 'float'] = 9.9
+    df2.loc[df2.index[3], 'date'] = pd.to_datetime('1968-01-01', utc=True)
+
+    pb.to_sql(pd.DataFrame(index=df2.index[:1], columns=['float'], data=[9.9]),
+              table_name=constants.TABLE_NAME,
+              con=pandabase_loaded_db,
+              how='upsert')
+    pb.to_sql(pd.DataFrame(index=df2.index[3:4], columns=['date'], data=[pd.to_datetime('1968-01-01', utc=True)]),
+              table_name=constants.TABLE_NAME,
+              con=pandabase_loaded_db,
+              how='upsert')
+
+    # check against pandabase read
+    loaded = pb.read_sql(constants.TABLE_NAME, con=pandabase_loaded_db)
+
+    df.loc[df.index[0], 'float'] = 9.9
+    df.loc[df.index[3], 'date'] = pd.to_datetime('1968-01-01', utc=True)
+
+    assert companda(df, loaded)
+
+
 @pytest.mark.parametrize('col_to_duplicate', ['integer', 'float', 'date', 'string'])
 def test_upsert_new_cols(pandabase_loaded_db, constants, col_to_duplicate):
     """upsert new rows with only 1 of 5 values (and index)"""

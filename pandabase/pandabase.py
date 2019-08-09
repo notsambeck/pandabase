@@ -174,9 +174,9 @@ def to_sql(df: pd.DataFrame, *,
                 # print(f'new dtypes: {df.dtypes}')
             else:
                 raise TypeError(
-                    f'Inconsistent type for col: {col_name}.'
-                    f'db: {db_pandas_dtype} /'
-                    f'df: {df_col_info["dtype"]}')
+                    f'Inconsistent type for column: {col_name} \n'
+                    f'db.{col_name}.dtype= {db_pandas_dtype} / '
+                    f'df{col_name}.dtype= {df_col_info["dtype"]}')
 
     #######################################################
     # FINALLY: either insert/fail, append/fail, or upsert #
