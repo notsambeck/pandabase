@@ -1,25 +1,29 @@
 # pandabase
 [![Build Status](https://travis-ci.org/notsambeck/pandabase.svg?branch=master)](https://travis-ci.org/notsambeck/pandabase)
 
-pandabase converts pandas DataFrames to &amp; from SQLite
+pandabase is a tool for reading & writing DataFrames to &amp; from SQLite 
+
+By default, uses DataFrame.index as primary key. By using an explicit primary key, pandabase makes it easy to upsert pandas data into SQL databases.
+
+Designed for time series datasets that need to be updated over time and stored to disk, but are used in-memory for computation.
 
 Tested under Python 3.6 and 3.7, with new versions of Pandas and SQLAlchemy
 
 ### Features
 * primary keys (any named index is assumed to be the PK)
-* allows upsert
-* also includes companda, a tool for comparing DataFrames
-* replaces pd.DataFrame.to_sql and pd.read_sql for some use cases
-* is simpler than pandas.sql module
-* is not guaranteed to work with all database backends (but could be extended...)
+  * also supports 'auto_index'
+* insert modes: 'create_only', 'upsert', and 'append'
+* replaces pd.DataFrame.to_sql and pd.read_sql
+* tested under SQLite
+  * postgres support coming soon
 * automated tests in pytest
-
-designed for time series datasets that need to be updated over time and stored to disk,
-but are used in-memory for computation.
+  * 96% coverage
+* also includes pandabase.companda.companda for rich comparisons of DataFrames
 
 ### Design Considerations
 * Minimal dependencies: SQLAlchemy and Pandas are the only requirements
 * Database is the source of truth: will coerce incoming DataFrames to fit existing schema
+  * but also is reasonably smart about how new tables are created from DataFrames
 * Not horrendously slow
 
 ### License
@@ -55,7 +59,7 @@ Table('my_table', ...
 
 That's all! 
 
-Your data is now persistently stored in a SQLite database, using my_data.index as primary key. To append or update data, replace 'create_only' with 'append' or 'upsert'. To store records without and explicit index, use 'autoindex=True'.
+Your data is now persistently stored in a SQLite database, using my_data.index as primary key. To append or update data, replace 'create_only' with 'append' or 'upsert'. To store records without an explicit index, use 'autoindex=True'.
 
 ```bash
 ~/pandabase$ ls
