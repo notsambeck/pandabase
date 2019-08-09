@@ -35,8 +35,9 @@ import logging
 def to_sql(df: pd.DataFrame, *,
            table_name: str,
            con: str or sqa.engine,
-           autoindex=False,
-           how='create_only', ):
+           auto_index=False,
+           how='create_only',
+           add_new_columns=False, ):
     """
     Write records stored in a DataFrame to a SQL database.
 
@@ -49,7 +50,8 @@ def to_sql(df: pd.DataFrame, *,
     table_name : string
         Name of SQL table.
     con : connection; database string URI < OR > sa.engine
-    autoindex: bool. if True, ignore existing df.index, make a new id
+    auto_index: bool, default False. if True, ignore existing df.index, make a new id
+    add_new_columns: bool, default False. if True, add any new columns as required by the dataframe.
     how : {'create_only', 'upsert', 'append'}, default 'create_only'
         - create_only:
             If table exists, raise an error and stop.
@@ -76,7 +78,7 @@ def to_sql(df: pd.DataFrame, *,
     if not isinstance(df, pd.DataFrame):
         raise ValueError('to_sql() requires a DataFrame as input')
 
-    if not autoindex:
+    if not auto_index:
         if not df.index.is_unique:
             raise ValueError('DataFrame index is not unique.')
         if df.index.hasnans:
@@ -100,7 +102,7 @@ def to_sql(df: pd.DataFrame, *,
             # print(col, 'tzinfo =', df[col].dt.tz)
 
     # make a list of df columns for later:
-    df_cols_dict = make_clean_columns_dict(df, autoindex=autoindex)
+    df_cols_dict = make_clean_columns_dict(df, autoindex=auto_index)
 
     #############################################
     # 3a. Make new Table from df info if needed #
@@ -120,18 +122,23 @@ def to_sql(df: pd.DataFrame, *,
         table = Table(table_name, meta, autoload=True, autoload_with=engine)
 
         if how == 'upsert':
-            if table.primary_key == PANDABASE_DEFAULT_INDEX or autoindex:
+            if table.primary_key == PANDABASE_DEFAULT_INDEX or auto_index:
                 raise IOError('Cannot upsert with an automatic index')
 
         # 3. iterate over df_columns; confirm that types are compatible and all columns exist
         for col_name, df_col_info in df_cols_dict.items():
             if col_name not in table.columns:
-                if df_col_info['dtype'] is not None:
-                    raise NameError(f'New data has at least one column that does not exist in DB: {col_name}')
+                if df_col_info['dtype'] is None:
+                    continue
+                elif add_new_columns:
+                    logging.info(f'adding new column to {con}:{table_name}: {col_name}')
+                    add_columns_to_db(make_column(col_name, df_col_info), table_name=table_name, con=con)
+                    meta.clear()
+                    table = Table(table_name, meta, autoload=True, autoload_with=engine)
 
                 else:
-                    logging.warning(f'skipping all-NaN column: {col_name}')
-                    continue
+                    raise NameError(f'New data has at least one column that does not exist in DB: {col_name}. \n'
+                                    f'Set add_new_columns to True to automatically fix.')
 
             # check that dtypes and PKs match for existing columns
             col = table.columns[col_name]
@@ -182,7 +189,7 @@ def to_sql(df: pd.DataFrame, *,
         with engine.begin() as con:
             rows = []
             df = df.dropna(axis=1, how='all')
-            if not autoindex:
+            if not auto_index:
                 for index, row in df.iterrows():
                     rows.append({**row.to_dict(), df.index.name: index})
                 con.execute(table.insert(), rows)
@@ -290,11 +297,10 @@ def read_sql(table_name: str,
     return df
 
 
-def add_columns_to_db(new_cols, table_name, con):
+def add_columns_to_db(new_col, table_name, con):
     # Make any new columns as needed with ALTER TABLE
     engine = engine_builder(con)
 
-    for new_col in new_cols:
-        with engine.begin() as conn:
-            conn.execute(f'ALTER TABLE {table_name} '
-                         f'ADD COLUMN {new_col.name} {new_col.type.compile(engine.dialect)}')
+    with engine.begin() as conn:
+        conn.execute(f'ALTER TABLE {table_name} '
+                     f'ADD COLUMN {new_col.name} {new_col.type.compile(engine.dialect)}')

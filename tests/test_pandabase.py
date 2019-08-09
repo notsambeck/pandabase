@@ -111,7 +111,7 @@ def test_create_table_no_index_load_pandas(empty_db, minimal_df):
                       table_name='sample',
                       con=empty_db,
                       how='create_only',
-                      autoindex=True,
+                      auto_index=True,
                       )
 
     # print(table.columns)
@@ -133,7 +133,7 @@ def test_create_read_table_no_index(empty_db, minimal_df):
                       table_name='sample',
                       con=empty_db,
                       how='create_only',
-                      autoindex=True,
+                      auto_index=True,
                       )
 
     # print(table.columns)
@@ -391,6 +391,25 @@ def test_upsert_incomplete_rows(pandabase_loaded_db, constants):
     assert companda(df, loaded)
 
 
+@pytest.mark.parametrize('col_to_duplicate', ['integer', 'float', 'date', 'string'])
+def test_upsert_new_cols(pandabase_loaded_db, constants, col_to_duplicate):
+    """upsert new rows with only 1 of 5 values (and index)"""
+    assert pb.has_table(pandabase_loaded_db, constants.TABLE_NAME)
+    df = pb.read_sql(constants.TABLE_NAME, con=pandabase_loaded_db)
+    df['bonus_col'] = df[col_to_duplicate].copy()
+
+    pb.to_sql(df,
+              table_name=constants.TABLE_NAME,
+              con=pandabase_loaded_db,
+              how='upsert',
+              add_new_columns=True)
+
+    # check against pandabase read
+    loaded = pb.read_sql(constants.TABLE_NAME, con=pandabase_loaded_db)
+    assert companda(df, loaded)
+    assert 'bonus_col' in df.columns
+
+
 def test_upsert_coerce_float(pandabase_loaded_db, constants):
     """insert an integer into float column"""
     assert pb.has_table(pandabase_loaded_db, constants.TABLE_NAME)
@@ -460,7 +479,7 @@ def test_new_column_all_nan(pandabase_loaded_db, df_with_all_nan_col, constants)
     pb.to_sql(df_with_all_nan_col,
               table_name=constants.TABLE_NAME,
               con=pandabase_loaded_db,
-              autoindex=False,
+              auto_index=False,
               how='append', )
 
 
@@ -497,7 +516,7 @@ def test_autoindex_add_valid_bool(minimal_df, empty_db, constants):
               table_name=constants.TABLE_NAME,
               con=empty_db,
               how='create_only',
-              autoindex=True, )
+              auto_index=True, )
     assert pb.has_table(empty_db, constants.TABLE_NAME)
 
     df = pd.DataFrame(index=[101, 102, 103],
@@ -508,7 +527,7 @@ def test_autoindex_add_valid_bool(minimal_df, empty_db, constants):
               table_name=constants.TABLE_NAME,
               con=empty_db,
               how='append',
-              autoindex=True, )
+              auto_index=True, )
 
     df = pb.read_sql(constants.TABLE_NAME, con=empty_db)
 
@@ -593,12 +612,12 @@ def test_append_autoindex(empty_db, minimal_df):
     pb.to_sql(minimal_df,
               table_name='sample',
               con=empty_db,
-              autoindex=True,
+              auto_index=True,
               how='create_only')
     table2 = pb.to_sql(minimal_df,
                        table_name='sample',
                        con=empty_db,
-                       autoindex=True,
+                       auto_index=True,
                        how='append')
 
     assert table2.columns[PANDABASE_DEFAULT_INDEX].primary_key
@@ -615,13 +634,13 @@ def test_upsert_autoindex_fails(empty_db, minimal_df):
     pb.to_sql(minimal_df,
               table_name='sample',
               con=empty_db,
-              autoindex=True,
+              auto_index=True,
               how='create_only')
     with pytest.raises(IOError):
         table2 = pb.to_sql(minimal_df,
                            table_name='sample',
                            con=empty_db,
-                           autoindex=True,
+                           auto_index=True,
                            how='upsert')
 
 
@@ -631,7 +650,7 @@ def test_add_column_to_database(pandabase_loaded_db, actually_do, constants):
     name = 'a_new_column'
     col = sqa.Column(name, primary_key=False, type_=Integer, nullable=True)
     if actually_do:
-        pb.add_columns_to_db([col], table_name=constants.TABLE_NAME, con=pandabase_loaded_db)
+        pb.add_columns_to_db(col, table_name=constants.TABLE_NAME, con=pandabase_loaded_db)
     df = pb.read_sql(table_name=constants.TABLE_NAME, con=pandabase_loaded_db)
 
     if actually_do:
