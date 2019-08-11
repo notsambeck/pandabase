@@ -37,6 +37,12 @@ Code partially stolen from Dataset and pandas.sql
 From your inside your virtual environment of choice:
 
 ```bash
+~/$ pip install pandabase
+```
+
+For latest version:
+
+```bash
 ~/$ git clone https://github.com/notsambeck/pandabase
 ~/$ cd pandabase
 ~/pandabase/$ pip install -r requirements.txt
