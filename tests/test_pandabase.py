@@ -718,3 +718,15 @@ def test_add_column_to_database(pandabase_loaded_db, actually_do, constants):
         assert is_integer_dtype(df[name])
     else:
         assert name not in df.columns
+
+
+def test_read_table_names(pandabase_loaded_db, constants):
+    names = pb.read_db_table_names(pandabase_loaded_db)
+    assert len(names) == 1
+    assert names[0] == constants.TABLE_NAME
+
+
+def test_read_table_columns(pandabase_loaded_db, simple_df, constants):
+    cols = pb.read_db_table_column_names(pandabase_loaded_db, constants.TABLE_NAME)
+    assert len(cols) == len(simple_df.columns) + 1
+    assert constants.SAMPLE_INDEX_NAME in [col.name for col in cols]

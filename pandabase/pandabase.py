@@ -315,3 +315,17 @@ def add_columns_to_db(new_col, table_name, con):
     with engine.begin() as conn:
         conn.execute(f'ALTER TABLE {table_name} '
                      f'ADD COLUMN {name} {new_col.type.compile(engine.dialect)}')
+
+
+def read_db_table_names(con):
+    """get a list of table names from database"""
+    meta = sqa.MetaData()
+    meta.reflect(engine_builder(con))
+    return list(meta.tables.keys())
+
+
+def read_db_table_column_names(con, table_name):
+    """get a list of table names from database"""
+    meta = sqa.MetaData()
+    meta.reflect(engine_builder(con))
+    return list(meta.tables[table_name].columns)
