@@ -1,3 +1,7 @@
+# packaging
+dist/
+build/
+
 # editors
 .idea
 .vscode

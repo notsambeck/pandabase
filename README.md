@@ -1,13 +1,13 @@
 # pandabase
 [![Build Status](https://travis-ci.org/notsambeck/pandabase.svg?branch=master)](https://travis-ci.org/notsambeck/pandabase)
 
-pandabase is a tool for reading & writing DataFrames to &amp; from SQLite 
+pandabase links pandas DataFrames to SQL databases, supporting read, append, and upsert.
 
-By default, uses DataFrame.index as primary key. By using an explicit primary key, pandabase makes it easy to upsert pandas data into SQL databases.
+By default, uses DataFrame.index as primary key. By using an explicit primary key, pandabase makes it easy to upsert.
 
 Designed for time series datasets that need to be updated over time and stored to disk, but are used in-memory for computation.
 
-Tested under Python 3.6 and 3.7, with new versions of Pandas and SQLAlchemy
+Tested under Python 3.6 and 3.7, with new versions of Pandas and SQLAlchemy.
 
 ### Features
 * primary keys (any named index is assumed to be the PK)
@@ -17,7 +17,7 @@ Tested under Python 3.6 and 3.7, with new versions of Pandas and SQLAlchemy
 * tested under SQLite
   * postgres support coming soon
 * automated tests in pytest
-  * 96% coverage
+  * 96% test coverage
 * also includes pandabase.companda.companda for rich comparisons of DataFrames
 
 ### Design Considerations
@@ -69,7 +69,7 @@ Your data is now persistently stored in a SQLite database, using my_data.index a
 
 ```bash
 ~/pandabase$ ls
-brand_new_sqlite_db.sqlite
+new_sqlite_db.sqlite
 ```
 
 ```python
