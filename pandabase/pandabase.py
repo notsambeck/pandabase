@@ -308,7 +308,7 @@ def read_sql(table_name: str,
 
 
 def add_columns_to_db(new_col, table_name, con):
-    # Make any new columns as needed with ALTER TABLE
+    """Make new columns as needed with ALTER TABLE, as a weak substitute for migrations"""
     engine = engine_builder(con)
     name = clean_name(new_col.name)
 
@@ -317,15 +317,29 @@ def add_columns_to_db(new_col, table_name, con):
                      f'ADD COLUMN {name} {new_col.type.compile(engine.dialect)}')
 
 
-def read_db_table_names(con):
+def get_db_table_names(con):
     """get a list of table names from database"""
     meta = sqa.MetaData()
     meta.reflect(engine_builder(con))
     return list(meta.tables.keys())
 
 
-def read_db_table_column_names(con, table_name):
-    """get a list of table names from database"""
+def get_table_column_names(con, table_name):
+    """get a list of column names from database, table"""
     meta = sqa.MetaData()
     meta.reflect(engine_builder(con))
     return list(meta.tables[table_name].columns)
+
+
+def describe_database(con):
+    """get a useful description of database content"""
+    con = engine_builder(con)
+    meta = sqa.MetaData()
+    meta.reflect(con)
+
+    res = {}
+
+    for table in meta.tables.keys():
+        res[table] = con.execute(sqa.select([sqa.func.count()]).select_from(sqa.text(table))).scalar()
+
+    return res
