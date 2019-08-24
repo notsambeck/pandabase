@@ -735,4 +735,6 @@ def test_get_columns(pandabase_loaded_db, simple_df, constants):
 def test_describe_db(pandabase_loaded_db, constants):
     desc = pb.describe_database(pandabase_loaded_db)
     assert len(desc) == 1                       # 1 table in sample db
-    assert desc[constants.TABLE_NAME] == 6      # 6 rows in table
+    assert desc[constants.TABLE_NAME][0] == 0    # min index
+    assert desc[constants.TABLE_NAME][1] == 5    # max index
+    assert desc[constants.TABLE_NAME][2] == 6    # count

@@ -332,14 +332,30 @@ def get_table_column_names(con, table_name):
 
 
 def describe_database(con):
-    """get a useful description of database content"""
-    con = engine_builder(con)
+    """
+    get a useful description of database content
+
+    Args:
+        engine: string URI or db connectable
+
+    Returns:
+
+    """
+    engine = engine_builder(con)
     meta = sqa.MetaData()
-    meta.reflect(con)
+    meta.reflect(engine)
 
     res = {}
 
-    for table in meta.tables.keys():
-        res[table] = con.execute(sqa.select([sqa.func.count()]).select_from(sqa.text(table))).scalar()
+    for table_name in meta.tables:
+        table = Table(table_name, meta, autoload=True, autoload_with=engine)
+        index = table.primary_key.columns.items()
+        if len(index) != 1:
+            raise ValueError(f'Invalid index for table {table_name}: {index}')
+        index = index[0][0]
+        minim = engine.execute(sqa.select([sqa.func.min(sqa.text(index))]).select_from(table)).scalar()
+        maxim = engine.execute(sqa.select([sqa.func.max(sqa.text(index))]).select_from(table)).scalar()
+        count = engine.execute(sqa.select([sqa.func.count()]).select_from(table)).scalar()
+        res[table_name] = [minim, maxim, count]
 
     return res
