@@ -98,10 +98,11 @@ def to_sql(df: pd.DataFrame, *,
 
     for col in df.columns:
         if is_datetime64_any_dtype(df[col]):
-            if df[col].dt.tz != pytz.utc:
-                raise ValueError(f'Column {col} is not set as UTC. Please correct.')
-            # else:
-            # print(col, 'tzinfo =', df[col].dt.tz)
+            if df[col].dt.tz is None:
+                raise ValueError(f'Column {col} timzeone must be set, maybe with '
+                                 f'col.tz_localize(pytz.timezone).tz_convert(pytz.utc)')
+            elif df[col].dt.tz != pytz.utc:
+                raise ValueError(f'Column {col} is not set to UTC. Maybe correct with col.tz_convert(pytz.utc)')
 
     # make a list of df columns for later:
     df_cols_dict = make_clean_columns_dict(df, autoindex=auto_index)
@@ -225,10 +226,14 @@ def read_sql(table_name: str,
     """
     Read in a table from con as a pd.DataFrame, preserving dtypes and primary keys
 
-    :param table_name: str
-    :param con: db connectable
-    :param lowest: minimum index value to select (inclusive)
-    :param highest: maximum index value to select (inclusive)
+    Args:
+        table_name:
+        con:
+        lowest: inclusive
+        highest: inclusive
+
+    Returns:
+        DataFrame of selected data with table.primary_key as index
     """
     engine = engine_builder(con)
     meta = sqa.MetaData(bind=engine)
@@ -336,10 +341,11 @@ def describe_database(con):
     get a useful description of database content
 
     Args:
-        engine: string URI or db connectable
+        con: string URI or db engine
 
     Returns:
-
+        {'table_name_1': {'min': min, 'max': max, 'count': count},
+         ... }
     """
     engine = engine_builder(con)
     meta = sqa.MetaData()
@@ -356,6 +362,6 @@ def describe_database(con):
         minim = engine.execute(sqa.select([sqa.func.min(sqa.text(index))]).select_from(table)).scalar()
         maxim = engine.execute(sqa.select([sqa.func.max(sqa.text(index))]).select_from(table)).scalar()
         count = engine.execute(sqa.select([sqa.func.count()]).select_from(table)).scalar()
-        res[table_name] = [minim, maxim, count]
+        res[table_name] = {'min': minim, 'max': maxim, 'count': count}
 
     return res

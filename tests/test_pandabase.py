@@ -144,6 +144,21 @@ def test_create_read_table_no_index(empty_db, minimal_df):
     assert pb.companda(loaded, minimal_df, ignore_index=True)
 
 
+@pytest.mark.parametrize('how, qty', [('create_only', 10000),
+                                      ('upsert', 1000)])
+def test_write_time(empty_db, how, qty):
+    """test that write times are semi-acceptably fast"""
+    start = pd.datetime.utcnow()
+    pb.to_sql(pd.DataFrame(index=range(qty), columns=['a', 'b', 'c'], data=pd.np.random.random((qty, 3))),
+              table_name='sample',
+              con=empty_db,
+              how=how,
+              auto_index=True,
+              )
+    end = pd.datetime.utcnow()
+    assert end-start < pd.Timedelta(seconds=2)
+
+
 def test_create_select_table_index(session_db, simple_df, constants):
     """add a new table with explicit index, read it back with pandabase, check equality"""
     table = pb.to_sql(simple_df,
@@ -697,11 +712,11 @@ def test_upsert_autoindex_fails(empty_db, minimal_df):
               auto_index=True,
               how='create_only')
     with pytest.raises(IOError):
-        table2 = pb.to_sql(minimal_df,
-                           table_name='sample',
-                           con=empty_db,
-                           auto_index=True,
-                           how='upsert')
+        pb.to_sql(minimal_df,
+                  table_name='sample',
+                  con=empty_db,
+                  auto_index=True,
+                  how='upsert')
 
 
 @pytest.mark.parametrize('actually_do', [True, False])
@@ -734,7 +749,7 @@ def test_get_columns(pandabase_loaded_db, simple_df, constants):
 
 def test_describe_db(pandabase_loaded_db, constants):
     desc = pb.describe_database(pandabase_loaded_db)
-    assert len(desc) == 1                       # 1 table in sample db
-    assert desc[constants.TABLE_NAME][0] == 0    # min index
-    assert desc[constants.TABLE_NAME][1] == 5    # max index
-    assert desc[constants.TABLE_NAME][2] == 6    # count
+    assert len(desc) == 1                        # 1 table in sample db
+    assert desc[constants.TABLE_NAME]['min'] == 0    # min
+    assert desc[constants.TABLE_NAME]['max'] == 5    # max
+    assert desc[constants.TABLE_NAME]['count'] == 6    # count
