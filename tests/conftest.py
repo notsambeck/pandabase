@@ -1,5 +1,6 @@
 import pandas as pd
 import pytest
+import sqlalchemy as sa
 
 import pandabase as pb
 
@@ -39,11 +40,19 @@ def constants():
     return SimpleNamespace(**d)
 
 
-@pytest.fixture(scope='function')
-def empty_db():
+@pytest.fixture(scope='function', params=['sqlite:///:memory:',
+                                          'postgresql+psycopg2://postgres:postgres@localhost:5432/testdb'])  # must make
+def empty_db(request):
     """In-memory database fixture; not persistent"""
-    print('empty db fixture setup...')
-    return pb.engine_builder('sqlite:///:memory:')
+    if 'sqlite' not in request.param:
+        e = pb.engine_builder(request.param)
+        meta = sa.MetaData()
+        meta.reflect(e)
+        for table_name in meta.tables:
+            print(table_name)
+            meta.tables[table_name].drop(e)
+
+    return pb.engine_builder(request.param)
 
 
 @pytest.fixture(scope='function')
