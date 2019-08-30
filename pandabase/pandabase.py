@@ -27,6 +27,8 @@ from pandas.api.types import is_string_dtype
 
 import sqlalchemy as sqa
 from sqlalchemy import Table, and_
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+
 import pytz
 import logging
 
@@ -215,6 +217,7 @@ def _insert(table: sqa.Table,
             engine: sqa.engine,
             clean_data: pd.DataFrame,
             auto_index: bool):
+
     with engine.begin() as con:
         rows = []
         df = clean_data.dropna(axis=1, how='all')
@@ -229,19 +232,28 @@ def _insert(table: sqa.Table,
 
 
 # TODO: this try/except needs to start a new transaction with Postgres backend. Doing that the naive way makes
-# TODO:     upsert extremely slow as a new connection is started for each row. Need a better solution
+#   upsert extremely slow as a new connection is started for each row.
+#   see: https://docs.sqlalchemy.org/en/13/dialects/postgresql.html#insert-on-conflict-upsert
 def _upsert(table: sqa.Table,
             engine: sqa.engine,
             clean_data: pd.DataFrame):
+    # print(engine.dialect.dbapi.__name__)
     with engine.begin() as con:
         for index, row in clean_data.iterrows():
             # check index uniqueness by attempting insert; if it fails, update
             row = {**row.dropna().to_dict(), clean_data.index.name: index}
             try:
-                insert = table.insert().values(row)
+                if engine.dialect.dbapi.__name__ == 'psycopg2':
+                    insert = pg_insert(table).values(row).on_conflict_do_update(
+                        index_elements=[clean_data.index.name],
+                        set_=row
+                    )
+                else:
+                    insert = table.insert().values(row)
+
                 con.execute(insert)
 
-            except Exception:
+            except sqa.exc.IntegrityError:
                 upsert = table.update() \
                     .where(table.c[clean_data.index.name] == index) \
                     .values(row)
@@ -310,7 +322,6 @@ def read_sql(table_name: str,
             # force all dates to utc
             if is_datetime64_any_dtype(dtype):
                 # print(df.index.tz, 'PK - old...')
-                # TODO: this probably causes problems with postgres dataabase due to timezone info thrown out
                 df.index = pd.to_datetime(df[col.name].values, utc=True)
                 # print(df.index.tz, 'PK - new')
 
