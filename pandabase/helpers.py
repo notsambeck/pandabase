@@ -8,15 +8,32 @@ from pandas.api.types import (is_bool_dtype,
                               )
 
 import sqlalchemy as sqa
-from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean
+from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, TIMESTAMP
 
 # fake random index name in case of not explicitly indexed data
 PANDABASE_DEFAULT_INDEX = 'pandabase_default_index_237856037524875'
-lookup = {Integer: pd.Int64Dtype(),
-          Float: np.float64,
-          DateTime: np.datetime64,
-          Boolean: np.bool_,
-          String: np.str_}
+
+
+def _sqa_type2pandas_type(sqa_dtype, index=False):
+    if sqa_dtype == Integer:
+        if index:
+            return int
+        else:
+            return pd.Int64Dtype()
+    elif sqa_dtype == Float:
+        return np.float64
+    elif sqa_dtype == Boolean:
+        return np.bool_
+    elif sqa_dtype == String:
+        return np.str_
+    elif sqa_dtype == DateTime:
+        return np.datetime64
+    elif sqa_dtype == TIMESTAMP:
+        return np.datetime64
+    elif isinstance(sqa_dtype, TIMESTAMP):
+        return np.datetime64
+    else:
+        raise TypeError(f'Unknown sqlalchemy dtype: {sqa_dtype}')
 
 
 def series_is_boolean(col: pd.Series or pd.Index):
@@ -95,18 +112,21 @@ def _get_type_from_df_col(col: pd.Series, index: bool):
     elif is_float_dtype(col):
         return Float
     elif is_datetime64_any_dtype(col):
-        return DateTime
+        return TIMESTAMP(timezone=True)
     else:
         return String
 
 
 def _get_type_from_db_col(col: sqa.Column):
+    """limit sqlalchemy types to explicit list"""
     if isinstance(col.type, sqa.types.Integer):
         return Integer
     elif isinstance(col.type, sqa.types.Float):
         return Float
     elif isinstance(col.type, sqa.types.DateTime):
-        return DateTime
+        return TIMESTAMP(timezone=True)
+    elif isinstance(col.type, sqa.types.TIMESTAMP):
+        return TIMESTAMP(timezone=True)
     elif isinstance(col.type, sqa.types.Boolean):
         return Boolean
     else:
@@ -126,29 +146,24 @@ def get_column_dtype(column, pd_or_sqla, index=False):
     Returns:
         Type or None
             if pd_or_sqla == 'sqla':
-                one of {Integer, Float, Boolean, DateTime, String, or None (for all NaN)}
+                one of {Integer, Float, Boolean, DateTime, String, or None (for all-NaN column)}
             if pd_or_sqla == 'pd':
                 one of {np.int64, np.float64, np.datetime64, np.bool_, np.str_}
     """
     if isinstance(column, sqa.Column):
-        datatype = _get_type_from_db_col(column)
+        dtype = _get_type_from_db_col(column)
     elif isinstance(column, (pd.Series, pd.Index)):
-        datatype = _get_type_from_df_col(column, index=index)
+        dtype = _get_type_from_df_col(column, index=index)
     else:
         raise ValueError(f'get_column_datatype takes a column; got {type(column)}')
 
-    if datatype is None:
+    if dtype is None:
         return None
 
     elif pd_or_sqla == 'sqla':
-        return datatype
+        return dtype
     elif pd_or_sqla == 'pd':
-        local_lookup = lookup.copy()
-        if index:
-            # for index use non-nullable int i.e. int
-            local_lookup[Integer] = int
-
-        return local_lookup[datatype]
+        return _sqa_type2pandas_type(dtype, index=index)
     else:
         raise ValueError(f'Select pd_or_sqla must equal either "pd" or "sqla"')
 

@@ -27,7 +27,6 @@ from pandas.api.types import is_string_dtype
 
 import sqlalchemy as sqa
 from sqlalchemy import Table, and_
-from sqlalchemy.exc import IntegrityError
 import pytz
 import logging
 
@@ -70,7 +69,9 @@ def to_sql(df: pd.DataFrame, *,
     meta = sqa.MetaData()
 
     ######################
-    # 2. validate inputs #
+    #
+    #     2. validate inputs
+    #
     ######################
     clean_table_name = clean_name(table_name)
     if clean_table_name != table_name:
@@ -107,16 +108,22 @@ def to_sql(df: pd.DataFrame, *,
     # make a list of df columns for later:
     df_cols_dict = make_clean_columns_dict(df, autoindex=auto_index)
 
-    #############################################
-    # 3a. Make new Table from df info if needed #
-    #############################################
+    #####################################################
+    #
+    #    3a. Make new Table from df info, if it does not exist...
+    #
+    #####################################################
     if not has_table(engine, table_name):
         logging.info(f'Creating new table {table_name}')
         table = Table(table_name, meta,
                       *[make_column(name, info) for name, info in df_cols_dict.items()
                         if info['dtype'] is not None])
+
     #######################################################################################
-    # 3b. Or make Table from db schema; DB will be the source of truth for datatypes etc. #
+    #
+    #    3b. Or make Table from db schema
+    #    db will be the source of truth for datatypes etc. in the future
+    #
     #######################################################################################
     else:
         if how == 'create_only':
@@ -155,14 +162,17 @@ def to_sql(df: pd.DataFrame, *,
             if db_sqla_dtype == df_col_info['dtype']:
                 continue
 
-            ############################################
-            # 3d. COERCE BAD DATATYPES - case by case #
-            ############################################
+            #############################################
+            #
+            #    3d. COERCE BAD DATATYPES - case by case
+            #
+            #############################################
             db_pandas_dtype = get_column_dtype(col, pd_or_sqla='pd')
 
             if df_col_info['dtype'] is None:
                 # this does not need to be explicitly handled because when inserting None, nothing happens
                 continue
+
             elif is_datetime64_any_dtype(db_pandas_dtype):
                 df[col_name] = pd.to_datetime(df[col_name].values, utc=True)
 
@@ -171,8 +181,12 @@ def to_sql(df: pd.DataFrame, *,
                     df_col_info['dtype'] == Float and is_integer_dtype(db_pandas_dtype)
             ):
                 # print(f'NUMERIC DTYPE: converting df[{name}] from {df[name].dtype} to {db_pandas_dtype}')
-                df[col_name] = df[col_name].astype(db_pandas_dtype)
-                # print(f'new dtypes: {df.dtypes}')
+                try:
+                    df[col_name] = df[col_name].astype(db_pandas_dtype)
+                except Exception as e:
+                    raise TypeError(f'Error {e} trying to coerce float to int or vice versa, '
+                                    f'e.g. {df[col_name][0]} to {db_pandas_dtype}')
+
             else:
                 raise TypeError(
                     f'Inconsistent type for column: {col_name} \n'
@@ -189,34 +203,49 @@ def to_sql(df: pd.DataFrame, *,
 
     if how in ['append', 'create_only']:
         # will raise IntegrityError if repeated index encountered
-        with engine.begin() as con:
-            rows = []
-            df = df.dropna(axis=1, how='all')
-            if not auto_index:
-                for index, row in df.iterrows():
-                    rows.append({**row.to_dict(), df.index.name: index})
-                con.execute(table.insert(), rows)
-            else:
-                for index, row in df.iterrows():
-                    rows.append({**row.to_dict()})
-                con.execute(table.insert(), rows)
+        _insert(table, engine, df, auto_index)
 
     elif how == 'upsert':
-        with engine.begin() as con:
-            for index, row in df.iterrows():
-                # check index uniqueness by attempting insert; if it fails, update
-                row = {**row.dropna().to_dict(), df.index.name: index}
-                try:
-                    insert = table.insert().values(row)
-                    con.execute(insert)
-
-                except IntegrityError:
-                    upsert = table.update() \
-                        .where(table.c[df.index.name] == index) \
-                        .values(row)
-                    con.execute(upsert)
+        _upsert(table, engine, df)
 
     return table
+
+
+def _insert(table: sqa.Table,
+            engine: sqa.engine,
+            clean_data: pd.DataFrame,
+            auto_index: bool):
+    with engine.begin() as con:
+        rows = []
+        df = clean_data.dropna(axis=1, how='all')
+        if not auto_index:
+            for index, row in df.iterrows():
+                rows.append({**row.to_dict(), df.index.name: index})
+            con.execute(table.insert(), rows)
+        else:
+            for index, row in df.iterrows():
+                rows.append({**row.to_dict()})
+            con.execute(table.insert(), rows)
+
+
+# TODO: this try/except needs to start a new transaction with Postgres backend. Doing that the naive way makes
+# TODO:     upsert extremely slow as a new connection is started for each row. Need a better solution
+def _upsert(table: sqa.Table,
+            engine: sqa.engine,
+            clean_data: pd.DataFrame):
+    with engine.begin() as con:
+        for index, row in clean_data.iterrows():
+            # check index uniqueness by attempting insert; if it fails, update
+            row = {**row.dropna().to_dict(), clean_data.index.name: index}
+            try:
+                insert = table.insert().values(row)
+                con.execute(insert)
+
+            except Exception:
+                upsert = table.update() \
+                    .where(table.c[clean_data.index.name] == index) \
+                    .values(row)
+                con.execute(upsert)
 
 
 def read_sql(table_name: str,
@@ -281,6 +310,7 @@ def read_sql(table_name: str,
             # force all dates to utc
             if is_datetime64_any_dtype(dtype):
                 # print(df.index.tz, 'PK - old...')
+                # TODO: this probably causes problems with postgres dataabase due to timezone info thrown out
                 df.index = pd.to_datetime(df[col.name].values, utc=True)
                 # print(df.index.tz, 'PK - new')
 

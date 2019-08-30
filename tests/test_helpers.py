@@ -9,7 +9,7 @@ def test_get_sql_dtype_df(df_with_all_nan_col):
     assert isinstance(df.index, pd.RangeIndex)
 
     assert is_datetime64_any_dtype(df.date)
-    assert get_column_dtype(df.date, 'sqla') == DateTime
+    assert isinstance(get_column_dtype(df.date, 'sqla'), TIMESTAMP)
     assert get_column_dtype(df.date, 'pd') == np.datetime64
 
     assert is_integer_dtype(df.integer)
