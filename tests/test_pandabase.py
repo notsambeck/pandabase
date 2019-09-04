@@ -12,7 +12,7 @@ from pandabase.companda import companda
 
 import pytz
 UTC = pytz.utc
-TZ = pytz.timezone('America/Los_Angeles')    # test timezone
+LA_TZ = pytz.timezone('America/Los_Angeles')    # test timezone
 
 
 @pytest.mark.parametrize('df, how', [
@@ -658,7 +658,7 @@ def test_add_fails_invalid_date(pandabase_loaded_db, how, constants):
     df = pd.DataFrame(index=[1], columns=['date'], data=[['x']])
     df.index.name = constants.SAMPLE_INDEX_NAME
 
-    with pytest.raises(ValueError):
+    with pytest.raises((ValueError, TypeError, sqa.exc.StatementError)):
         pb.to_sql(df,
                   table_name=constants.TABLE_NAME,
                   con=pandabase_loaded_db,
@@ -668,8 +668,8 @@ def test_add_fails_invalid_date(pandabase_loaded_db, how, constants):
 @pytest.mark.parametrize('how, tz',
                          [['append', None],
                           ['upsert', None],
-                          ['append', TZ],
-                          ['upsert', TZ], ]
+                          ['append', LA_TZ],
+                          ['upsert', LA_TZ], ]
                          )
 def test_add_fails_invalid_timezone(pandabase_loaded_db, how, constants, tz):
     assert pb.has_table(pandabase_loaded_db, constants.TABLE_NAME)

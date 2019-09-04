@@ -176,7 +176,9 @@ def to_sql(df: pd.DataFrame, *,
                 continue
 
             elif is_datetime64_any_dtype(db_pandas_dtype):
-                df[col_name] = pd.to_datetime(df[col_name].values, utc=True)
+                pass
+                # TODO: df[col_name] = pd.to_datetime(df[col_name].values, utc=True)      # THIS FAILS FOR INDEX/PK
+                # should be unnecessary anyway
 
             elif (
                     df_col_info['dtype'] == Integer and is_float_dtype(db_pandas_dtype)) or (
