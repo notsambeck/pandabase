@@ -1,8 +1,12 @@
 """
 Tests for pandabase.
 
-Note that the working directory is project root; when running tests from PyCharm,
-the default may be root/tests. Can be set from Run/Debug Configurations:Templates
+Note that the working directory is must be project_root_dir; when running tests from (for example) PyCharm,
+the default may be project_root_dir/tests. In Pycharm this default can be set from Run/Debug Configurations:Templates
+
+see, e.g.:
+https://pythonspot.com/python-database-postgresql/
+for postgres configuration commands to run postgres tests (use command 'pytest --run-postgres')
 """
 import pytest
 
@@ -150,7 +154,7 @@ def test_create_read_table_no_index(empty_db, minimal_df):
     assert pb.companda(loaded, minimal_df, ignore_index=True)
 
 
-@pytest.mark.parametrize('how, qty', [('create_only', 1000),
+@pytest.mark.parametrize('how, qty', [('create_only', 10000),
                                       ('upsert', 1000)])
 def test_write_time(empty_db, how, qty):
     """test that write times are semi-acceptably fast"""

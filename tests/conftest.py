@@ -1,3 +1,14 @@
+"""
+test pandabase against supported databases through fixtures:
+
+sqlite: automatic - because SQLite is filesystem- or memory-based, sqlite does not require any setup
+
+postgres: not automatic; execute these with pytest --run-postgres. postgresql requires:
+    postgres service to be running in background
+    a database has been set up: testdb
+    a user/password: postgres/postgres
+"""
+
 import pandas as pd
 import pytest
 import sqlalchemy as sa
@@ -27,6 +38,24 @@ FILE2 = join('tests', 'sample_data2.csv.zip')
 FILE3 = join('tests', 'sample_data3.csv')
 
 
+def pytest_addoption(parser):
+    """postgres will not run by default"""
+    parser.addoption(
+        "--run-postgres", action="store_true", default=False, help="run tests against postgresql database"
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    """add config to convert mark.postgres to mark.skip without --run-postgres"""
+    if config.getoption("--run-postgres"):
+        # --postgres given in cli: run postgres tests
+        return
+    skip_slow = pytest.mark.skip(reason="need --run-postgres option to run")
+    for item in items:
+        if "postgres" in item.keywords:
+            item.add_marker(skip_slow)
+
+
 @pytest.fixture(scope='session')
 def constants():
     d = {
@@ -41,7 +70,8 @@ def constants():
 
 
 @pytest.fixture(scope='function', params=['sqlite:///:memory:',
-                                          'postgresql+psycopg2://postgres:postgres@localhost:5432/testdb'])  # must make
+                                          pytest.param('postgresql+psycopg2://postgres:postgres@localhost:5432/testdb',
+                                                       marks=pytest.mark.postgres), ])
 def empty_db(request):
     """In-memory database fixture; not persistent"""
     if 'sqlite' not in request.param:
