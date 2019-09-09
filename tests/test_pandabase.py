@@ -154,7 +154,7 @@ def test_create_read_table_no_index(empty_db, minimal_df):
     assert pb.companda(loaded, minimal_df, ignore_index=True)
 
 
-@pytest.mark.parametrize('how, qty', [('create_only', 10000),
+@pytest.mark.parametrize('how, qty', [('create_only', 3000),
                                       ('upsert', 1000)])
 def test_write_time(empty_db, how, qty):
     """test that write times are semi-acceptably fast"""
