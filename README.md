@@ -3,21 +3,23 @@
 
 pandabase links pandas DataFrames to SQL databases, supporting read, append, and upsert.
 
-By default, uses DataFrame.index as primary key. By using an explicit primary key, pandabase makes it easy to upsert.
+By default, uses DataFrame.index as the primary key. By using an explicit primary key, pandabase makes rational database schemas the obvious choice, and makes it easy to maintain clean data even when it must be updated frequently. 
 
-Designed for time series datasets that need to be updated over time and stored to disk, but are used in-memory for computation.
+Designed for especially for time-series datasets that need to be updated over time and stored to disk, but are used primarily in-memory for computation.
 
-Tested under Python 3.6 and 3.7, with new versions of Pandas (>= 0.24) SQLAlchemy (>= 1.3). Also requires psycopg2 for postgres support.
+Tested under Python 3.6 and 3.7, with new versions of Pandas (>= 0.24) SQLAlchemy (>= 1.3). Requires psycopg2 for postgres (8+) support.
+
+It's a relatively new tool, but for my purposes it works great. Comments and contributions welcome.
 
 ### Features
-* primary keys (any named index is assumed to be the PK)
-  * also supports auto_index with parameter auto_index=True 
+* primary keys: by default, any named index is assumed to be the PK
+  * also supports auto_index (with parameter auto_index=True)
 * insert modes: 'create_only', 'upsert', and 'append'
 * replaces pd.DataFrame.to_sql and pd.read_sql
 * tested under SQLite and PostgresQL
-* automated tests in pytest
-  * 96% test coverage
-* also includes pandabase.companda.companda for rich comparisons of DataFrames
+* automated test suite in pytest
+  * 93% test coverage
+* also includes pandabase.companda.companda(df1, df2) for rich comparisons of DataFrames
 
 ### Design Considerations
 * Minimal dependencies: SQLAlchemy and Pandas are the only requirements
@@ -101,7 +103,7 @@ Companda(False, message='Columns, indices are equal, but unqual values in column
 False
 ```
 
-Table tools:
+Table tools: pandabase.  ...
 * add_columns_to_db(new_col, table_name, con):
     * """Make new columns as needed with ALTER TABLE, as a weak substitute for migrations"""
 * drop_db_table(table_name, con):
