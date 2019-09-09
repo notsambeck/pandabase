@@ -1,16 +1,16 @@
 from setuptools import setup
 
-with open("README.md", "r") as fh:
-    long_description = fh.read()
+with open("README.md", "r") as readme:
+    long_description = readme.read()
 
 setup(
-    version='0.1.1',
+    version='0.2.0',
     author='Sam Beck',
     author_email='notsambeck@gmail.com',
     name='pandabase',
     packages=['pandabase'],
-    description="pandabase links pandas DataFrames to SQL databases. Supports read, append, and upsert.",
-    long_description = long_description,
+    description="pandabase links pandas DataFrames to SQL databases. Upsert, append, read, drop, describe...",
+    long_description=long_description,
     long_description_content_type = 'text/markdown',
     url="https://github.com/notsambeck/pandabase",
     classifiers=[

@@ -7,15 +7,14 @@ By default, uses DataFrame.index as primary key. By using an explicit primary ke
 
 Designed for time series datasets that need to be updated over time and stored to disk, but are used in-memory for computation.
 
-Tested under Python 3.6 and 3.7, with new versions of Pandas and SQLAlchemy.
+Tested under Python 3.6 and 3.7, with new versions of Pandas (>= 0.24) SQLAlchemy (>= 1.3). Also requires psycopg2 for postgres support.
 
 ### Features
 * primary keys (any named index is assumed to be the PK)
-  * also supports 'auto_index'
+  * also supports auto_index with parameter auto_index=True 
 * insert modes: 'create_only', 'upsert', and 'append'
 * replaces pd.DataFrame.to_sql and pd.read_sql
-* tested under SQLite
-  * postgres support coming soon
+* tested under SQLite and PostgresQL
 * automated tests in pytest
   * 96% test coverage
 * also includes pandabase.companda.companda for rich comparisons of DataFrames
@@ -33,7 +32,6 @@ MIT license
 Code partially stolen from Dataset and pandas.sql
 
 ### Installation
-
 From your inside your virtual environment of choice:
 
 ```bash
@@ -83,3 +81,34 @@ new_sqlite_db.sqlite
 10  0.453716 
 11  0.406995
 ```
+
+### Additional Features
+Companda - rich comparisons of DataFrames. call companda on two DataFrames, get a Companda object back (that evaluates to True/False).
+
+```python
+>>> from pandabse.companda import companda
+>>> df = pandabase.read_sql('my_table', con='sqlite:///new_sqlite_db.sqlite'))
+>>> companda(df, df.copy())
+Companda(True, message='Equal DataFrames')
+>>> bool(companda(df, df.copy()))
+True
+
+>>> df2 = df.copy
+>>> df2.iloc[1, 2] = -1000
+>>> companda(df, df2)
+Companda(False, message='Columns, indices are equal, but unqual values in columns...')
+>>> bool(companda(df, df2))
+False
+```
+
+Table tools:
+* add_columns_to_db(new_col, table_name, con):
+    * """Make new columns as needed with ALTER TABLE, as a weak substitute for migrations"""
+* drop_db_table(table_name, con):
+    * """Drop table [table_name] from con"""
+* get_db_table_names(con):
+    * """get a list of table names from database"""
+* get_table_column_names(con, table_name):
+    * """get a list of column names from database, table"""
+* describe_database(con):
+    * """get a description of database content: table_name: {table_info_dict}"""

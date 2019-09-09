@@ -71,7 +71,7 @@ def series_is_boolean(col: pd.Series or pd.Index):
 def engine_builder(con):
     """
     Returns a SQLAlchemy engine from a URI (if con is a string)
-    else it just return con without modifying it.
+    if con is already a connection, return con without modifying it.
     """
     if isinstance(con, str):
         con = sqa.create_engine(con)
@@ -118,7 +118,7 @@ def _get_type_from_df_col(col: pd.Series, index: bool):
 
 
 def _get_type_from_db_col(col: sqa.Column):
-    """limit sqlalchemy types to explicit list"""
+    """Return Sqlalchemy type of a SQLAlchemy column. Updated to limit sqlalchemy types to this explicit list"""
     if isinstance(col.type, sqa.types.Integer):
         return Integer
     elif isinstance(col.type, sqa.types.Float):
@@ -169,7 +169,7 @@ def get_column_dtype(column, pd_or_sqla, index=False):
 
 
 def has_table(con, table_name):
-    """pandas.sql.has_table()"""
+    """return true of a table exactly named table_name exists in con"""
     engine = engine_builder(con)
     return engine.run_callable(engine.dialect.has_table, table_name)
 

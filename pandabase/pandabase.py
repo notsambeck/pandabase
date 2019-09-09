@@ -394,7 +394,7 @@ def get_table_column_names(con, table_name):
 
 def describe_database(con):
     """
-    get a useful description of database content
+    get a description of database content: table_name: {table_info_dict}
 
     Args:
         con: string URI or db engine
