@@ -181,8 +181,10 @@ def to_sql(df: pd.DataFrame, *,
                 # should be unnecessary anyway
 
             elif (
-                    df_col_info['dtype'] == Integer and is_float_dtype(db_pandas_dtype)) or (
-                    df_col_info['dtype'] == Float and is_integer_dtype(db_pandas_dtype)
+                    df_col_info['dtype'] == Integer and is_float_dtype(db_pandas_dtype) or
+                    df_col_info['dtype'] == Float and is_integer_dtype(db_pandas_dtype) or
+                    df_col_info['dtype'] == Boolean and is_integer_dtype(db_pandas_dtype) or
+                    df_col_info['dtype'] == Boolean and is_float_dtype(db_pandas_dtype)
             ):
                 # print(f'NUMERIC DTYPE: converting df[{name}] from {df[name].dtype} to {db_pandas_dtype}')
                 try:
