@@ -233,12 +233,13 @@ def _insert(table: sqa.Table,
             con.execute(table.insert(), rows)
 
 
-# TODO: this try/except needs to start a new transaction with Postgres backend. Doing that the naive way makes
-#   upsert extremely slow as a new connection is started for each row.
-#   see: https://docs.sqlalchemy.org/en/13/dialects/postgresql.html#insert-on-conflict-upsert
 def _upsert(table: sqa.Table,
             engine: sqa.engine,
             clean_data: pd.DataFrame):
+    """
+    insert data into a table, replacing any duplicate indices
+    postgres - see: https://docs.sqlalchemy.org/en/13/dialects/postgresql.html#insert-on-conflict-upsert
+    """
     # print(engine.dialect.dbapi.__name__)
     with engine.begin() as con:
         for index, row in clean_data.iterrows():
@@ -365,6 +366,18 @@ def add_columns_to_db(new_col, table_name, con):
                      f'ADD COLUMN {name} {new_col.type.compile(engine.dialect)}')
 
 
+def drop_db_table(table_name, con):
+    """Drop table [table_name] from con"""
+    engine = engine_builder(con)
+    meta = sqa.MetaData(engine)
+    meta.reflect(bind=engine)
+
+    t = meta.tables[table_name]
+
+    with engine.begin():
+        t.drop()
+
+
 def get_db_table_names(con):
     """get a list of table names from database"""
     meta = sqa.MetaData()
@@ -397,14 +410,17 @@ def describe_database(con):
     res = {}
 
     for table_name in meta.tables:
-        table = Table(table_name, meta, autoload=True, autoload_with=engine)
-        index = table.primary_key.columns.items()
-        if len(index) != 1:
-            raise ValueError(f'Invalid index for table {table_name}: {index}')
-        index = index[0][0]
-        minim = engine.execute(sqa.select([sqa.func.min(sqa.text(index))]).select_from(table)).scalar()
-        maxim = engine.execute(sqa.select([sqa.func.max(sqa.text(index))]).select_from(table)).scalar()
-        count = engine.execute(sqa.select([sqa.func.count()]).select_from(table)).scalar()
-        res[table_name] = {'min': minim, 'max': maxim, 'count': count}
+        try:
+            table = Table(table_name, meta, autoload=True, autoload_with=engine)
+            index = table.primary_key.columns.items()
+            if len(index) != 1:
+                raise ValueError(f'Invalid index for table {table_name}: {index}')
+            index = index[0][0]
+            minim = engine.execute(sqa.select([sqa.func.min(sqa.text(index))]).select_from(table)).scalar()
+            maxim = engine.execute(sqa.select([sqa.func.max(sqa.text(index))]).select_from(table)).scalar()
+            count = engine.execute(sqa.select([sqa.func.count()]).select_from(table)).scalar()
+            res[table_name] = {'min': minim, 'max': maxim, 'count': count}
+        except Exception as e:
+            print(f'failed to describe table: {table_name} due to {e}')
 
     return res
