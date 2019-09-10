@@ -4,7 +4,7 @@ with open("README.md", "r") as readme:
     long_description = readme.read()
 
 setup(
-    version='0.2.0',
+    version='0.2.1',
     author='Sam Beck',
     author_email='notsambeck@gmail.com',
     name='pandabase',
