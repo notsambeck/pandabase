@@ -38,7 +38,8 @@ def to_sql(df: pd.DataFrame, *,
            con: str or sqa.engine,
            auto_index=False,
            how='create_only',
-           add_new_columns=False, ):
+           add_new_columns=False, 
+           schema: str = None):
     """
     Write records stored in a DataFrame to a SQL database.
 
@@ -63,6 +64,8 @@ def to_sql(df: pd.DataFrame, *,
             create table if needed
             if record exists: update
             else: insert
+    schema: Specify the schema (if database flavor supports this). If None, use default schema.
+    
     """
     # 1. make connection objects
     df = df.copy()
@@ -102,7 +105,7 @@ def to_sql(df: pd.DataFrame, *,
     for col in df.columns:
         if is_datetime64_any_dtype(df[col]):
             if df[col].dt.tz is None:
-                raise ValueError(f'Column {col} timzeone must be set, maybe with '
+                raise ValueError(f'Column {col} timezone must be set, maybe with '
                                  f'col.tz_localize(pytz.timezone).tz_convert(pytz.utc)')
             elif df[col].dt.tz != pytz.utc:
                 raise ValueError(f'Column {col} is not set to UTC. Maybe correct with col.tz_convert(pytz.utc)')
@@ -115,11 +118,23 @@ def to_sql(df: pd.DataFrame, *,
     #    3a. Make new Table from df info, if it does not exist...
     #
     #####################################################
-    if not has_table(engine, table_name):
-        logging.info(f'Creating new table {table_name}')
-        table = Table(table_name, meta,
+    if not has_table(engine, table_name, schema = schema):
+        
+        # log the creation of the table
+        if schema is not None:
+            log_info = f'Creating new table {schema}.{table_name}'
+        else:
+            log_info = f'Creating new table {table_name}'
+        
+        logging.info(log_info)
+        
+        
+        # create the table
+        table = Table(table_name, 
+                      meta,
                       *[make_column(name, info) for name, info in df_cols_dict.items()
-                        if info['dtype'] is not None])
+                        if info['dtype'] is not None],
+                      schema = schema) # schema defaults to None also in the Table class
 
     #######################################################################################
     #
@@ -131,7 +146,7 @@ def to_sql(df: pd.DataFrame, *,
         if how == 'create_only':
             raise NameError(f'Table {table_name} already exists; param "how" is set to "create_only".')
 
-        table = Table(table_name, meta, autoload=True, autoload_with=engine)
+        table = Table(table_name, meta, autoload=True, autoload_with=engine, schema = schema)
 
         if how == 'upsert':
             if table.primary_key == PANDABASE_DEFAULT_INDEX or auto_index:
@@ -144,9 +159,13 @@ def to_sql(df: pd.DataFrame, *,
                     continue
                 elif add_new_columns:
                     logging.info(f'adding new column to {con}:{table_name}: {col_name}')
-                    add_columns_to_db(make_column(col_name, df_col_info), table_name=table_name, con=con)
+                    add_columns_to_db(make_column(col_name, df_col_info), table_name=table_name, con=con, schema = schema)
                     meta.clear()
-                    table = Table(table_name, meta, autoload=True, autoload_with=engine)
+                    table = Table(table_name, 
+                                  meta, 
+                                  autoload=True, 
+                                  autoload_with=engine,
+                                  schema = schema) # schema defaults to None also in the Table class
 
                 else:
                     raise NameError(f'New data has at least one column that does not exist in DB: {col_name}. \n'
@@ -171,7 +190,7 @@ def to_sql(df: pd.DataFrame, *,
             #############################################
             db_pandas_dtype = get_column_dtype(col, pd_or_sqla='pd')
 
-            if df_col_info['dtype'] is None:
+            if df_col_info['dtype'] is None: # dtype is for instance None when the whole column is NULL
                 # this does not need to be explicitly handled because when inserting None, nothing happens
                 continue
 
@@ -268,7 +287,7 @@ def _upsert(table: sqa.Table,
 def read_sql(table_name: str,
              con: str or sqa.engine,
              *,
-             lowest=None, highest=None):
+             lowest=None, highest=None, schema:str = None):
     """
     Read in a table from con as a pd.DataFrame, preserving dtypes and primary keys
 
@@ -283,7 +302,11 @@ def read_sql(table_name: str,
     """
     engine = engine_builder(con)
     meta = sqa.MetaData(bind=engine)
-    table = Table(table_name, meta, autoload=True, autoload_with=engine)
+    table = Table(table_name, 
+                  meta, 
+                  autoload=True, 
+                  autoload_with=engine, 
+                  schema = schema) # schema defaults to None also in the Table class
 
     if len(table.primary_key.columns) == 0:
         print('no index')
@@ -358,21 +381,26 @@ def read_sql(table_name: str,
     return df
 
 
-def add_columns_to_db(new_col, table_name, con):
+def add_columns_to_db(new_col, table_name, con, schema = None):
     """Make new columns as needed with ALTER TABLE, as a weak substitute for migrations"""
     engine = engine_builder(con)
     name = clean_name(new_col.name)
+    
+    if schema is None:
+        table_namespace = table_name
+    else:
+        table_namespace = f'{schema}.{table_name}'
 
     with engine.begin() as conn:
-        conn.execute(f'ALTER TABLE {table_name} '
+        conn.execute(f'ALTER TABLE {table_namespace} '
                      f'ADD COLUMN {name} {new_col.type.compile(engine.dialect)}')
 
 
-def drop_db_table(table_name, con):
+def drop_db_table(table_name, con, schema = None):
     """Drop table [table_name] from con"""
     engine = engine_builder(con)
     meta = sqa.MetaData(engine)
-    meta.reflect(bind=engine)
+    meta.reflect(bind=engine, schema = schema)
 
     t = meta.tables[table_name]
 
@@ -380,26 +408,29 @@ def drop_db_table(table_name, con):
         t.drop()
 
 
-def get_db_table_names(con):
+def get_db_table_names(con, schema = None):
     """get a list of table names from database"""
     meta = sqa.MetaData()
-    meta.reflect(engine_builder(con))
+    engine = engine_builder(con)
+    meta.reflect(bind = engine, schema = schema)
     return list(meta.tables.keys())
 
 
-def get_table_column_names(con, table_name):
+def get_table_column_names(con, table_name, schema = None):
     """get a list of column names from database, table"""
     meta = sqa.MetaData()
-    meta.reflect(engine_builder(con))
+    engine = engine_builder(con)
+    meta.reflect(bind = engine, schema = schema)
     return list(meta.tables[table_name].columns)
 
 
-def describe_database(con):
+def describe_database(con, schema = None):
     """
     get a description of database content: table_name: {table_info_dict}
 
     Args:
         con: string URI or db engine
+        schema: Specify the schema (if database flavor supports this). If None, use default schema.
 
     Returns:
         {'table_name_1': {'min': min, 'max': max, 'count': count},
@@ -407,7 +438,7 @@ def describe_database(con):
     """
     engine = engine_builder(con)
     meta = sqa.MetaData()
-    meta.reflect(engine)
+    meta.reflect(bind = engine, schema = schema)
 
     res = {}
 
