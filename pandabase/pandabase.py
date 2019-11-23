@@ -308,6 +308,7 @@ def read_sql(table_name: str,
         con:
         lowest: inclusive
         highest: inclusive
+        schema: Specify the schema (if database flavor supports this). If None, use default schema.
 
     Returns:
         DataFrame of selected data with table.primary_key as index
