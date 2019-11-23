@@ -169,7 +169,7 @@ def get_column_dtype(column, pd_or_sqla, index=False):
 
 
 def has_table(con, table_name, schema = None):
-    """returns True of a table exactly named table_name exists in con"""
+    """returns True if a table exactly named table_name exists in con"""
     engine = engine_builder(con)
     
     if schema is not None:
