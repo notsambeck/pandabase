@@ -243,13 +243,25 @@ def _insert(table: sqa.Table,
 
     with engine.begin() as con:
         rows = []
+        
+        # remove completely null columns
         df = clean_data.dropna(axis=1, how='all')
+
         if not auto_index:
             for index, row in df.iterrows():
+                # replace pd.NaT (NULL value for datetimes in pandas) to None at the row level
+                # this is necessary because pd.NaT will cause an exception (invalid datetime)
+                # also this seems to only work at the row level
+                # since pandas will automatically coerce NULLs in a Series of datetimes to pd.NaT
+                row = row.map(lambda val: None if val is pd.NaT else val)
+
                 rows.append({**row.to_dict(), df.index.name: index})
             con.execute(table.insert(), rows)
         else:
             for index, row in df.iterrows():
+                # do the same operation as in the case "if not auto_index" (see above) for pd.NaT 
+                row = row.map(lambda val: None if val is pd.NaT else val)
+                
                 rows.append({**row.to_dict()})
             con.execute(table.insert(), rows)
 
@@ -402,7 +414,12 @@ def drop_db_table(table_name, con, schema = None):
     meta = sqa.MetaData(engine)
     meta.reflect(bind=engine, schema = schema)
 
-    t = meta.tables[table_name]
+    if schema is None:
+        table_namespace = table_name
+    else:
+        table_namespace = f'{schema}.{table_name}'
+    
+    t = meta.tables[table_namespace]
 
     with engine.begin():
         t.drop()
@@ -421,7 +438,14 @@ def get_table_column_names(con, table_name, schema = None):
     meta = sqa.MetaData()
     engine = engine_builder(con)
     meta.reflect(bind = engine, schema = schema)
-    return list(meta.tables[table_name].columns)
+    
+    if schema is None:
+        table_namespace = table_name
+    else:
+        table_namespace = f'{schema}.{table_name}'
+    
+    
+    return list(meta.tables[table_namespace].columns)
 
 
 def describe_database(con, schema = None):
