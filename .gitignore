@@ -8,6 +8,7 @@ build/
 htmlcov/
 
 #log files
+test_log.log
 tests/test_log.log
 
 #python
