@@ -50,6 +50,10 @@ def pytest_collection_modifyitems(config, items):
     if config.getoption("--run-postgres"):
         # --postgres given in cli: run postgres tests
         return
+    print('Skipping postgres tests. To run them:')
+    print('1. install postgres locally')
+    print('2. run at postgres:postgres@localhost:5432/testdb')
+    print('3. pytest --run-postgres')
     skip_slow = pytest.mark.skip(reason="need --run-postgres option to run")
     for item in items:
         if "postgres" in item.keywords:
