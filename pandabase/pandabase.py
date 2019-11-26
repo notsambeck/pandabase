@@ -88,7 +88,7 @@ def to_sql(df: pd.DataFrame, *,
     if not auto_index:
         if not df.index.is_unique:
             raise ValueError('DataFrame index is not unique.')
-        if df.index.hasnans:
+        if not isinstance(df.index, pd.MultiIndex) and df.index.hasnans:
             raise ValueError('DataFrame index has NaN values.')
         if is_datetime64_any_dtype(df.index):
             if df.index.tz != pytz.utc:
