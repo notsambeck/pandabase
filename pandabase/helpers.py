@@ -168,10 +168,14 @@ def get_column_dtype(column, pd_or_sqla, index=False):
         raise ValueError(f'Select pd_or_sqla must equal either "pd" or "sqla"')
 
 
-def has_table(con, table_name):
-    """return true of a table exactly named table_name exists in con"""
+def has_table(con, table_name, schema = None):
+    """returns True if a table exactly named table_name exists in con"""
     engine = engine_builder(con)
-    return engine.run_callable(engine.dialect.has_table, table_name)
+    
+    if schema is not None:
+        return engine.run_callable(engine.dialect.has_table, table_name, schema = schema)
+    else:
+        return engine.run_callable(engine.dialect.has_table, table_name)
 
 
 def clean_name(name):
@@ -184,7 +188,25 @@ def clean_name(name):
 
 
 def make_clean_columns_dict(df: pd.DataFrame, autoindex=False):
-    """Take a DataFrame and use_index, return a dictionary {name: {Column info}} (including index or not)"""
+    """Take a DataFrame and use_index, return a dictionary {name: {Column info}} (including index or not)
+    
+    
+    Example:
+        >>> import pandas as pd
+        >>> data = {'full_name':['John Doe'],
+        ...         'number_of_pets':[3],
+        ...         'likes_bananas':[True], 
+        ...         'dob':[pd.Timestamp('1990-01-01')]}
+        >>> 
+        >>> df = pd.DataFrame(data).rename_axis('id', axis = 'index')
+        >>> make_clean_columns_dict(df)
+        {'id': {'dtype': sqlalchemy.sql.sqltypes.Integer, 'pk': True},
+         'full_name': {'dtype': sqlalchemy.sql.sqltypes.String, 'pk': False},
+         'number_of_pets': {'dtype': sqlalchemy.sql.sqltypes.Integer, 'pk': False},
+         'likes_bananas': {'dtype': sqlalchemy.sql.sqltypes.Boolean, 'pk': False},
+         'dob': {'dtype': TIMESTAMP(timezone=True), 'pk': False}}
+    
+    """
     columns = {}
     df.columns = [clean_name(col) for col in df.columns]
 
