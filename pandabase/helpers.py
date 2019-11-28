@@ -15,6 +15,7 @@ PANDABASE_DEFAULT_INDEX = 'pandabase_default_index_237856037524875'
 
 
 def _sqa_type2pandas_type(sqa_dtype, index=False):
+    """explicitly map SQLAlchemy datatypes to our Pandas dtypes. param index is to prevent nullable index"""
     if sqa_dtype == Integer:
         if index:
             return int
@@ -26,22 +27,20 @@ def _sqa_type2pandas_type(sqa_dtype, index=False):
         return np.bool_
     elif sqa_dtype == String:
         return np.str_
-    elif sqa_dtype == DateTime:
-        return np.datetime64
-    elif sqa_dtype == TIMESTAMP:
-        return np.datetime64
-    elif isinstance(sqa_dtype, TIMESTAMP):
+    elif sqa_dtype in [DateTime, TIMESTAMP] or isinstance(sqa_dtype, TIMESTAMP):
         return np.datetime64
     else:
         raise TypeError(f'Unknown sqlalchemy dtype: {sqa_dtype}')
 
 
 def series_is_boolean(col: pd.Series or pd.Index):
-    """returns:
-    None if column is all None;
-    True if a pd.Series only contains True, False, and None;
-    otherwise False
-    does not interpret all-zero or all-one columns as boolean"""
+    """
+    returns:
+        None if column is all None;
+        True if a pd.Series only contains True, False, and None;
+        False otherwise
+
+    caveat: does not interpret all-zero or all-one columns as boolean"""
     if len(col.unique()) == 1 and col.unique()[0] is None:
         # return None for all-None columns
         return None
@@ -53,8 +52,8 @@ def series_is_boolean(col: pd.Series or pd.Index):
         for val in col.unique():
             if val not in [True, False, None]:
                 return False
-            if not (False in col.unique() and True in col.unique()):
-                return False
+        if not (False in col.unique() and True in col.unique()):
+            return False
         return True
     elif is_integer_dtype(col) or is_float_dtype(col):
         for val in col.unique():
@@ -188,9 +187,10 @@ def clean_name(name):
 
 
 def make_clean_columns_dict(df: pd.DataFrame, autoindex=False):
-    """Take a DataFrame and use_index, return a dictionary {name: {Column info}} (including index or not)
-    
-    
+    """Takes a DataFrame, returns a dictionary {column_names: {column info dicts}}
+
+    if autoindex, include an additional new Integer column named PANDABASE_DEFAULT_INDEX
+
     Example:
         >>> import pandas as pd
         >>> data = {'full_name':['John Doe'],
