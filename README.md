@@ -1,4 +1,5 @@
-# pandabase
+[![pandabase_logo](https://github.com/notsambeck/notsambeck.github.io/blob/master/media/pandabase_logo.jpg?raw=true)]
+
 ##### pip install pandabase
 [![Build Status](https://travis-ci.org/notsambeck/pandabase.svg?branch=master)](https://travis-ci.org/notsambeck/pandabase)
 
@@ -8,21 +9,28 @@ By default, uses DataFrame.index as the primary key. By using an explicit primar
 
 Designed for especially for time-series datasets that need to be updated over time and stored to disk, but are used primarily in-memory for computation. All supported types can be a value or Null, nice for ML applications.
 
-Tested under Python 3.6 and 3.7, with new versions of Pandas (>= 0.24) SQLAlchemy (>= 1.3). Works with SQLite and postgres - requires psycopg2 and postgres>=8.
+Tested under Python>=3.6, with new versions of Pandas (>= 0.24) SQLAlchemy (>= 1.3). Works with SQLite and postgres - requires psycopg2 and postgres>=8.
 
 ### Features
 * pandabase.to_sql replaces df.to_sql
 * pandabase.read_sql replaces pd.read_sql
-* primary keys: by default, uses df.index (with name != None) as PK
-  * alternatively, supports auto_index(with parameter auto_index=True)
-* insert modes: 'create_only', 'upsert', and 'append'
-* datatypes (nullable): boolean, int, float, datetime (UTC only), and string/object 
+* primary key support:
+    * by default, uses df.index (with name != None) as table PK
+    * optionally, generates new integer index (with parameter auto_index=True)
+* multiple insert modes: how='create_only', 'upsert', or 'append'
+* datatypes (all nullable): 
+    * boolean
+    * int
+    * float
+    * datetime (UTC only)
+    * string (object)
 
 ### Bonus Features
-* moderately smart insertion handles new records that 'almost correspond' with database schema
+* moderately smart insertion handles new records that 'almost correspond' with database schema automatically
 * tested under SQLite and PostgresQL
-* 93% test coverage (pytest)
-* includes companda for rich comparisons of DataFrames - super valuable for testing
+* supports arbitrary schemas in Postgres with the schema='name' keyword argument
+* 91% test coverage (pytest)
+* companda tool for rich comparisons of DataFrames
 
 ### Design Considerations
 * Minimal dependencies: Pandas (>= 0.24) & SQLAlchemy (>= 1.3) are the only requirements
@@ -34,7 +42,7 @@ Tested under Python 3.6 and 3.7, with new versions of Pandas (>= 0.24) SQLAlchem
 MIT license
 
 ### Thanks
-Code stolen from:
+Code partially stolen from:
 [Dataset](https://github.com/pudo/dataset) (nice, more general-purpose SQL interaction library) and 
 [pandas.sql](https://github.com/pandas-dev/pandas/blob/master/pandas/io/sql.py)
 
@@ -108,7 +116,7 @@ False
 
 Table tools: pandabase.
 * add_columns_to_db(new_col, table_name, con):
-    * """Make new columns as needed with ALTER TABLE (can be run by pandabase.to_sql automatically)"""
+    * """Make new columns as needed with ALTER TABLE (pandabase.to_sql can do this automatically during insertion with kwarg: add_new_columns=True)"""
 * drop_db_table(table_name, con):
     * """Drop table [table_name] from con"""
 * get_db_table_names(con):
