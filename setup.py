@@ -4,7 +4,7 @@ with open("README.md", "r") as readme:
     long_description = readme.read()
 
 setup(
-    version='0.2.1',
+    version='0.3',
     author='Sam Beck',
     author_email='notsambeck@gmail.com',
     name='pandabase',
@@ -21,5 +21,6 @@ setup(
     install_requires=[
         'pandas>=0.24.0',
         'sqlalchemy>=1.3.0',
-        ]
+        ],
+    python_requires='>=3.6',
 )
