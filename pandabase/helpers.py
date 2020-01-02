@@ -73,7 +73,10 @@ def engine_builder(con):
     if con is already a connection, return con without modifying it.
     """
     if isinstance(con, str):
-        con = sqa.create_engine(con)
+        if con[:8].lower() == 'postgres':
+            con = sqa.create_engine(con, connect_args={'connect_timeout': 10})
+        else:
+            con = sqa.create_engine(con)
 
     return con
 
