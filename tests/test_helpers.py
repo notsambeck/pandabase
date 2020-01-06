@@ -1,5 +1,6 @@
 from pandabase.helpers import *
 import pytest
+from pytz import utc
 
 
 def test_get_sql_dtype_df(df_with_all_nan_col):
@@ -67,3 +68,42 @@ def test_series_is_boolean(series, expected):
                                            ['weather_33.68_-117.87', 'weather_3368__11787']])
 def test_clean_name(name, cleaned):
     assert clean_name(name) == cleaned
+
+
+def test_make_clean_columns_dict_single_index():
+    """test make_clean_columns_dict works for a single index"""
+    data = {'full_name': ['John Doe'],
+            'number_of_pets': [3],
+            'likes_bananas': [True],
+            'dob': [pd.Timestamp('1990-01-01', tzinfo=utc)]}
+    df = pd.DataFrame(data).rename_axis('id', axis='index')
+    cols = make_clean_columns_dict(df)
+
+    res = {
+        'id': {'dtype': Integer, 'pk': True},
+        'full_name': {'dtype': String, 'pk': False},
+        'number_of_pets': {'dtype': Integer, 'pk': False},
+        'likes_bananas': {'dtype': Boolean, 'pk': False},
+        'dob': {'dtype': TIMESTAMP(timezone=True), 'pk': False}
+    }
+
+    assert cols.keys() == res.keys()
+
+    for k in cols.keys():
+        if isinstance(cols[k]['dtype'], TIMESTAMP):    # Equality comparison fails for TIMESTAMP == TIMESTAMP
+            assert isinstance(res[k]['dtype'], TIMESTAMP)
+            assert cols[k]['pk'] == res[k]['pk']
+        else:
+            assert cols[k] == res[k]
+
+
+def test_make_clean_columns_dict_multi_index():
+    """test make_clean_columns_dict works as expected for a multi index"""
+    data = {'full_name': ['John Doe'],
+            'number_of_pets': [3],
+            'likes_bananas': [True],
+            'dob': [pd.Timestamp('1990-01-01', tzinfo=utc)]}
+    df = pd.DataFrame(data)
+    df.index = pd.MultiIndex.from_arrays([[1], [2]], names=['category_id', 'member_id'])
+    with pytest.raises(NotImplementedError):
+        make_clean_columns_dict(df)
