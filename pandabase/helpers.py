@@ -192,7 +192,10 @@ def clean_name(name):
 def make_clean_columns_dict(df: pd.DataFrame, autoindex=False):
     """Takes a DataFrame, returns a dictionary {column_names: {column info dicts}}
 
-    if autoindex is True, include an additional new Integer column named PANDABASE_DEFAULT_INDEX and discard df.index
+    if autoindex is True:
+        if multi-index:
+            fail; must reset_index first
+        include an additional new Integer column named PANDABASE_DEFAULT_INDEX and discard df.index
 
     Example:
         >>> import pandas as pd
@@ -215,15 +218,25 @@ def make_clean_columns_dict(df: pd.DataFrame, autoindex=False):
 
     # get index info
     if autoindex:
+        if isinstance(df.index, pd.MultiIndex):
+            raise ValueError(f'Must reset_index to use autoindex=True')
+
         index_name = PANDABASE_DEFAULT_INDEX
         columns[index_name] = {'dtype': Integer,
                                'pk': True}
+
     elif isinstance(df.index, pd.MultiIndex):
-        raise NotImplementedError(f'MultiIndex is not supported')
+        indices = df[[]].reset_index(drop=False)
+        for col_name in indices.columns:
+            index_name = clean_name(col_name)
+            if col_name in df.columns:
+                raise NameError(f'MultiIndex name is duplicate of column name: {col_name}')
+            columns[index_name] = {'dtype': get_column_dtype(indices[col_name], 'sqla', index=True),
+                                   'pk': True}
     else:
         index_name = clean_name(df.index.name)
         if df.index.name in df.columns:
-            raise NameError(f'index column name is duplicate of column name: {df.index.name}')
+            raise NameError(f'index name is duplicate of column name: {df.index.name}')
         columns[index_name] = {'dtype': get_column_dtype(df.index, 'sqla', index=True),
                                'pk': True}
 
