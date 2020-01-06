@@ -17,7 +17,7 @@ tests/test_log.log
 *.egg-info
 
 #jupiter
-*checkpoint.ipynb
+*.ipynb
 
 #coverage
 .coverage

@@ -53,7 +53,7 @@ def to_sql(df: pd.DataFrame, *,
         table_name : string; Name of SQL table.
         con : connection; database string URI < OR > sa.engine
         auto_index: bool, default False. if True, ignore existing df.index, make a new integer index
-        add_new_columns: bool, default False. if True, add any new columns as required by the dataframe.
+        add_new_columns: bool, default False. if True, add any new columns as required by the DataFrame.
         how : {'create_only', 'upsert', 'append'}, default 'create_only'
             - create_only:
                 If table exists, raise an error and stop.
@@ -64,7 +64,7 @@ def to_sql(df: pd.DataFrame, *,
                 create table if needed
                 if record exists: update
                 else: insert
-        schema: Specify the schema (if database flavor supports this). If None, use default schema.
+        schema: Specify the schema (if database flavor supports this, i.e. postgresql). If None, use default schema.
     
     """
     # 1. make connection objects
@@ -83,23 +83,27 @@ def to_sql(df: pd.DataFrame, *,
         raise NameError(f'Illegal characters in table name: {table_name}. try: {clean_table_name}')
 
     if how not in ('create_only', 'append', 'upsert',):
-        raise ValueError(f"{how} is not a valid value for parameter: 'how'")
+        raise ValueError(f"Parameter how={how}; how must be in ['create_only', 'upsert', 'append']")
 
     if not isinstance(df, pd.DataFrame):
-        raise ValueError('to_sql() requires a DataFrame as input')
+        raise ValueError('pandabase.to_sql() requires a DataFrame as input')
 
     if not auto_index:
         if not df.index.is_unique:
-            raise ValueError('DataFrame index is not unique.')
+            raise ValueError('DataFrame.index is not unique and cannot be used as PK.')
         if df.index.hasnans:
-            raise ValueError('DataFrame index has NaN values.')
+            raise ValueError('DataFrame.index has NaN values and cannot be used as PK.')
         if is_datetime64_any_dtype(df.index):
             if df.index.tz != pytz.utc:
                 raise ValueError(f'Index {df.index.name} is not UTC. Please correct.')
         if df.index.name is None:
-            raise NameError('Autoindex is turned off, but df.index.name is None. Please correct.')
+            raise NameError('Autoindex is turned off, but df.index.name is None. Set df.index.name')
         df.index.name = clean_name(df.index.name)
+    elif isinstance(df.index, pd.MultiIndex):
+        raise ValueError(f'pandabase does not allow autoindex=True on a DataFrame with MultiIndex. '
+                         f'Try using df.reset_index(drop=[True or False, depending]).')
     else:
+        # case of a single index - proceed
         df.index.name = PANDABASE_DEFAULT_INDEX
 
     for col in df.columns:
@@ -108,7 +112,7 @@ def to_sql(df: pd.DataFrame, *,
                 raise ValueError(f'Column {col} timezone must be set, maybe with '
                                  f'col.tz_localize(pytz.timezone).tz_convert(pytz.utc)')
             elif df[col].dt.tz != pytz.utc:
-                raise ValueError(f'Column {col} is not set to UTC. Maybe correct with col.tz_convert(pytz.utc)')
+                raise ValueError(f'Column {col} is set, but not to UTC. Maybe correct with col.tz_convert(pytz.utc)')
 
     # make a list of df columns for later:
     df_cols_dict = make_clean_columns_dict(df, autoindex=auto_index)
@@ -149,13 +153,13 @@ def to_sql(df: pd.DataFrame, *,
 
         if how == 'upsert':
             if table.primary_key == PANDABASE_DEFAULT_INDEX or auto_index:
-                raise IOError('Cannot upsert with an automatic index')
+                raise IOError('Cannot upsert with an automatically generated index')
 
         # 3. iterate over df_columns; confirm that types are compatible and all columns exist
         for col_name, df_col_info in df_cols_dict.items():
             if col_name not in table.columns:
                 if df_col_info['dtype'] is None:
-                    continue
+                    continue   # skip empty columns that do not exist in db
                 elif add_new_columns:
                     logging.info(f'adding new column to {con}:{table_name}: {col_name}')
                     add_columns_to_db(make_column(col_name, df_col_info), table_name=table_name, con=con, schema=schema)
@@ -164,7 +168,7 @@ def to_sql(df: pd.DataFrame, *,
                                   meta, 
                                   autoload=True, 
                                   autoload_with=engine,
-                                  schema=schema) # schema defaults to None also in the Table class
+                                  schema=schema)  # schema defaults to None also in the Table class
 
                 else:
                     raise NameError(f'New data has at least one column that does not exist in DB: {col_name}. \n'
@@ -184,7 +188,7 @@ def to_sql(df: pd.DataFrame, *,
 
             #############################################
             #
-            #    3d. COERCE BAD DATATYPES - case by case
+            #    3d. COERCE INCONSISTENT DATATYPES - case by case
             #
             #############################################
             db_pandas_dtype = get_column_dtype(col, pd_or_sqla='pd')
@@ -195,20 +199,29 @@ def to_sql(df: pd.DataFrame, *,
 
             elif is_datetime64_any_dtype(db_pandas_dtype):
                 pass
-                # TODO: df[col_name] = pd.to_datetime(df[col_name].values, utc=True)      # THIS FAILS FOR INDEX/PK
-                # should be unnecessary anyway
+                # TODO: df[col_name] = pd.to_datetime(df[col_name].values, utc=True)
+                # TODO: would be nice, but THIS FAILS FOR INDEX/PK. would solve cases when:
+                # db.col is datetime and df.col is string
+                # df.datetime_column.tz != utc
 
             elif (
                     df_col_info['dtype'] == Integer and is_float_dtype(db_pandas_dtype) or
-                    df_col_info['dtype'] == Float and is_integer_dtype(db_pandas_dtype) or
-                    df_col_info['dtype'] == Boolean and is_integer_dtype(db_pandas_dtype) or
-                    df_col_info['dtype'] == Boolean and is_float_dtype(db_pandas_dtype)
+                    df_col_info['dtype'] == Float and is_integer_dtype(db_pandas_dtype)
             ):
                 # print(f'NUMERIC DTYPE: converting df[{name}] from {df[name].dtype} to {db_pandas_dtype}')
                 try:
                     df[col_name] = df[col_name].astype(db_pandas_dtype)
                 except Exception as e:
                     raise TypeError(f'Error {e} while trying to coerce float to int or vice versa, '
+                                    f'e.g. cannot coerce {df[col_name][0]} to {db_pandas_dtype}')
+            elif (
+                    df_col_info['dtype'] == Boolean and is_integer_dtype(db_pandas_dtype) or
+                    df_col_info['dtype'] == Boolean and is_float_dtype(db_pandas_dtype)
+            ):
+                try:
+                    df[col_name] = df[col_name].astype(db_pandas_dtype)
+                except Exception as e:
+                    raise TypeError(f'Error {e} while trying to coerce bool float or int, '
                                     f'e.g. cannot coerce {df[col_name][0]} to {db_pandas_dtype}')
 
             else:

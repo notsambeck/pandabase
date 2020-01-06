@@ -11,7 +11,7 @@ import sqlalchemy as sqa
 from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, TIMESTAMP
 
 # fake random index name in case of not explicitly indexed data
-PANDABASE_DEFAULT_INDEX = 'pandabase_default_index_237856037524875'
+PANDABASE_DEFAULT_INDEX = 'pandabase_auto_generated_index'
 
 
 def _sqa_type2pandas_type(sqa_dtype, index=False):
@@ -192,7 +192,7 @@ def clean_name(name):
 def make_clean_columns_dict(df: pd.DataFrame, autoindex=False):
     """Takes a DataFrame, returns a dictionary {column_names: {column info dicts}}
 
-    if autoindex, include an additional new Integer column named PANDABASE_DEFAULT_INDEX
+    if autoindex is True, include an additional new Integer column named PANDABASE_DEFAULT_INDEX and discard df.index
 
     Example:
         >>> import pandas as pd
@@ -214,15 +214,17 @@ def make_clean_columns_dict(df: pd.DataFrame, autoindex=False):
     df.columns = [clean_name(col) for col in df.columns]
 
     # get index info
-    if not autoindex:
+    if autoindex:
+        index_name = PANDABASE_DEFAULT_INDEX
+        columns[index_name] = {'dtype': Integer,
+                               'pk': True}
+    elif isinstance(df.index, pd.MultiIndex):
+        raise NotImplementedError(f'MultiIndex is not supported')
+    else:
         index_name = clean_name(df.index.name)
         if df.index.name in df.columns:
             raise NameError(f'index column name is duplicate of column name: {df.index.name}')
         columns[index_name] = {'dtype': get_column_dtype(df.index, 'sqla', index=True),
-                               'pk': True}
-    else:
-        index_name = PANDABASE_DEFAULT_INDEX
-        columns[index_name] = {'dtype': Integer,
                                'pk': True}
 
     # get column info
