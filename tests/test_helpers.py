@@ -131,3 +131,13 @@ def test_make_clean_columns_dict_multi_index(index_value, index_type):
             assert cols[k]['pk'] == res[k]['pk']
         else:
             assert cols[k] == res[k]
+
+
+def test_make_clean_cols_from_full_df(multi_index_df):
+    df = multi_index_df
+    x = make_clean_columns_dict(df, autoindex=False)
+    for pk in ['this', 'that']:
+        assert x[pk]['pk']
+        assert x[pk]['dtype'] in [Float, Integer]
+    for col in ['date', 'float', 'integer']:
+        assert not x[col]['pk']

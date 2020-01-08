@@ -18,10 +18,16 @@ import pytz
 UTC = pytz.utc
 LA_TZ = pytz.timezone('America/Los_Angeles')    # test timezone
 
+bad_df = pd.DataFrame(index=[2, 2], data=['x', 'y'])
+bad_df.index.name = 'bad_index'
+
+bad_df2 = pd.DataFrame(index=[1, None], columns=['a'], data=['x', 'y'])
+bad_df2.index.name = 'bad_index'
+
 
 @pytest.mark.parametrize('df, how', [
-    (pd.DataFrame(index=[2, 2], data=['x', 'y']), 'create_only'),
-    (pd.DataFrame(index=[1, None], columns=['a'], data=['x', 'y']), 'create_only'),
+    (bad_df, 'create_only'),
+    (bad_df2, 'create_only'),
     (pd.Series([1, 2, 3]), 'create_only'),
     (pd.DataFrame(index=[1, 2, 3], columns=['a'], data=['x', 'y', 'a']), 'fake_mode'),
 ])
@@ -152,6 +158,19 @@ def test_create_read_table_no_index(empty_db, minimal_df):
 
     assert pb.has_table(empty_db, 'sample')
     assert pb.companda(loaded, minimal_df, ignore_index=True)
+
+
+def test_create_table_multi_index(empty_db, multi_index_df):
+    """add a new minimal table & read it back with pandabase"""
+    table = pb.to_sql(multi_index_df,
+                      table_name='sample_mi',
+                      con=empty_db,
+                      how='create_only',
+                      )
+
+    # print(table.columns)
+    assert table.columns['this'].primary_key
+    assert table.columns['that'].primary_key
 
 
 @pytest.mark.parametrize('how, qty', [('create_only', 3000),

@@ -91,19 +91,27 @@ def to_sql(df: pd.DataFrame, *,
     if not auto_index:
         if not df.index.is_unique:
             raise ValueError('DataFrame.index is not unique and cannot be used as PK.')
-        if df.index.hasnans:
-            raise ValueError('DataFrame.index has NaN values and cannot be used as PK.')
         if is_datetime64_any_dtype(df.index):
             if df.index.tz != pytz.utc:
                 raise ValueError(f'Index {df.index.name} is not UTC. Please correct.')
-        if df.index.name is None:
-            raise NameError('Autoindex is turned off, but df.index.name is None. Set df.index.name')
+
+        if isinstance(df.index, pd.MultiIndex):
+            for val in df.index.names:
+                assert val is not None
+
+        else:
+            if df.index.name is None:
+                raise NameError('Autoindex is turned off, but df.index.name is None. Set df.index.name')
+            if df.index.hasnans:
+                raise ValueError('DataFrame.index has NaN values and cannot be used as PK.')
+
         df.index.name = clean_name(df.index.name)
-    elif isinstance(df.index, pd.MultiIndex):
-        raise ValueError(f'pandabase does not allow autoindex=True on a DataFrame with MultiIndex. '
-                         f'Try using df.reset_index(drop=[True or False, depending]).')
     else:
-        # case of a single index - proceed
+        if isinstance(df.index, pd.MultiIndex):
+            raise ValueError(f'pandabase does not allow autoindex=True on a DataFrame with MultiIndex. '
+                             f'Consider using df.reset_index(drop=[True or False]).')
+        # otherwise: auto_index; drop index info
+        df.reset_index(drop=True)
         df.index.name = PANDABASE_DEFAULT_INDEX
 
     for col in df.columns:
@@ -122,7 +130,7 @@ def to_sql(df: pd.DataFrame, *,
     #    3a. Make new Table from df info, if it does not exist...
     #
     #####################################################
-    if not has_table(engine, table_name, schema = schema):
+    if not has_table(engine, table_name, schema=schema):
         
         # log the creation of the table
         if schema is not None:
@@ -137,7 +145,7 @@ def to_sql(df: pd.DataFrame, *,
                       meta,
                       *[make_column(name, info) for name, info in df_cols_dict.items()
                         if info['dtype'] is not None],
-                      schema = schema) # schema defaults to None also in the Table class
+                      schema=schema)    # schema defaults to None also in the Table class
 
     #######################################################################################
     #
@@ -189,6 +197,7 @@ def to_sql(df: pd.DataFrame, *,
             #############################################
             #
             #    3d. COERCE INCONSISTENT DATATYPES - case by case
+            #    try to change DataFrame dtypes to match existing db dtypes
             #
             #############################################
             db_pandas_dtype = get_column_dtype(col, pd_or_sqla='pd')
@@ -250,27 +259,27 @@ def to_sql(df: pd.DataFrame, *,
 
 def _insert(table: sqa.Table,
             engine: sqa.engine,
-            clean_data: pd.DataFrame,
+            cleaned_data: pd.DataFrame,
             auto_index: bool):
 
     with engine.begin() as con:
         rows = []
         
         # remove completely null columns
-        df = clean_data.dropna(axis=1, how='all')
+        df = cleaned_data.dropna(axis=1, how='all')
 
         if not auto_index:
-            for index, row in df.iterrows():
+            for index, row in df.reset_index(drop=False).iterrows():
                 # replace pd.NaT (NULL value for datetimes in pandas) to None at the row level
                 # this is necessary because pd.NaT will cause an exception (invalid datetime)
                 # also this seems to only work at the row level
                 # since pandas will automatically coerce NULLs in a Series of datetimes to pd.NaT
                 row = row.map(lambda val: None if val is pd.NaT else val)
 
-                rows.append({**row.to_dict(), df.index.name: index})
+                rows.append({**row.to_dict()})
             con.execute(table.insert(), rows)
         else:
-            for index, row in df.iterrows():
+            for index, row in df.reset_index(drop=True).iterrows():
                 # do the same operation as in the case "if not auto_index" (see above) for pd.NaT 
                 row = row.map(lambda val: None if val is pd.NaT else val)
                 
@@ -280,20 +289,19 @@ def _insert(table: sqa.Table,
 
 def _upsert(table: sqa.Table,
             engine: sqa.engine,
-            clean_data: pd.DataFrame):
+            cleaned_data: pd.DataFrame):
     """
     insert data into a table, replacing any duplicate indices
     postgres - see: https://docs.sqlalchemy.org/en/13/dialects/postgresql.html#insert-on-conflict-upsert
     """
-    # print(engine.dialect.dbapi.__name__)
     with engine.begin() as con:
-        for index, row in clean_data.iterrows():
+        for index, row in cleaned_data.iterrows():
             # check index uniqueness by attempting insert; if it fails, update
-            row = {**row.dropna().to_dict(), clean_data.index.name: index}
+            row = {**row.dropna().to_dict(), cleaned_data.index.name: index}
             try:
                 if engine.dialect.dbapi.__name__ == 'psycopg2':
                     insert = pg_insert(table).values(row).on_conflict_do_update(
-                        index_elements=[clean_data.index.name],
+                        index_elements=[cleaned_data.index.name],
                         set_=row
                     )
                 else:
@@ -303,7 +311,7 @@ def _upsert(table: sqa.Table,
 
             except sqa.exc.IntegrityError:
                 upsert = table.update() \
-                    .where(table.c[clean_data.index.name] == index) \
+                    .where(table.c[cleaned_data.index.name] == index) \
                     .values(row)
                 con.execute(upsert)
 
