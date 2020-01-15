@@ -30,7 +30,10 @@ from sqlalchemy import Table, and_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 import pytz
-import logging
+from logging import getLogger
+
+
+logger = getLogger()
 
 
 def to_sql(df: pd.DataFrame, *,
@@ -138,7 +141,7 @@ def to_sql(df: pd.DataFrame, *,
         else:
             log_info = f'Creating new table {table_name}'
         
-        logging.info(log_info)
+        logger.info(log_info)
 
         # create the table
         table = Table(table_name, 
@@ -169,7 +172,7 @@ def to_sql(df: pd.DataFrame, *,
                 if df_col_info['dtype'] is None:
                     continue   # skip empty columns that do not exist in db
                 elif add_new_columns:
-                    logging.info(f'adding new column to {con}:{table_name}: {col_name}')
+                    logger.info(f'adding new column to {con}:{table_name}: {col_name}')
                     add_columns_to_db(make_column(col_name, df_col_info), table_name=table_name, con=con, schema=schema)
                     meta.clear()
                     table = Table(table_name, 
