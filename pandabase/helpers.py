@@ -170,12 +170,12 @@ def get_column_dtype(column, pd_or_sqla, index=False):
         raise ValueError(f'Select pd_or_sqla must equal either "pd" or "sqla"')
 
 
-def has_table(con, table_name, schema = None):
+def has_table(con, table_name, schema=None):
     """returns True if a table exactly named table_name exists in con"""
     engine = engine_builder(con)
     
     if schema is not None:
-        return engine.run_callable(engine.dialect.has_table, table_name, schema = schema)
+        return engine.run_callable(engine.dialect.has_table, table_name, schema=schema)
     else:
         return engine.run_callable(engine.dialect.has_table, table_name)
 

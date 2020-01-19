@@ -277,6 +277,7 @@ def _insert(table: sqa.Table,
                 # this is necessary because pd.NaT will cause an exception (invalid datetime)
                 # also this seems to only work at the row level
                 # since pandas will automatically coerce NULLs in a Series of datetimes to pd.NaT
+                # TODO: with logging.getLogger turned on, the following statement changes None to pd.nan. important?
                 row = row.map(lambda val: None if val is pd.NaT else val)
 
                 rows.append({**row.to_dict()})
