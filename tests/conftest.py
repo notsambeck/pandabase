@@ -62,6 +62,7 @@ def pytest_collection_modifyitems(config, items):
 
 @pytest.fixture(scope='session')
 def constants():
+    """constants so they can be used across tests"""
     d = {
         'FILE1': FILE1,
         'FILE2': FILE2,
@@ -77,7 +78,7 @@ def constants():
                                           pytest.param('postgresql+psycopg2://postgres:postgres@localhost:5432/testdb',
                                                        marks=pytest.mark.postgres), ])
 def empty_db(request):
-    """In-memory database fixture; not persistent"""
+    """In-memory database fixture; not persistent i.e. always empty when called"""
     if 'sqlite' not in request.param:
         e = pb.engine_builder(request.param)
         meta = sa.MetaData()
@@ -204,4 +205,26 @@ def simple_df_with_nans():
     df.loc[3, 'datetime'] = None
     df.loc[4, 'string'] = None
 
+    return df
+
+
+@pytest.fixture(scope='function')
+def multi_index_df():
+    """make a basic DataFrame with multiple dtypes, integer index"""
+    rows = 6
+    mi = pd.MultiIndex.from_arrays([list(range(rows)), [i / 10 for i in range(rows)]], names=['this', 'that'])
+    df = pd.DataFrame(columns=['date', 'integer', 'float', 'string', 'boolean'], index=mi)
+
+    df.date = pd.date_range(pd.to_datetime('2001-01-01 12:00am', utc=True), periods=rows, freq='h', tz=UTC)
+
+    df.integer = range(777, rows+777)
+    # df.integer = df.integer.astype(pd.Int64Dtype())   # nullable int is converted to Object as an index
+
+    df.float = [float(i) / 10 for i in range(rows)]
+    df.float = df.float.astype(pd.np.float)
+
+    df.string = list('panda_base')[:rows]
+    df.boolean = [True, False] * (rows//2)
+
+    assert df.date.loc[(0, 0.0)].tzinfo == UTC
     return df

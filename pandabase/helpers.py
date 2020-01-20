@@ -11,7 +11,7 @@ import sqlalchemy as sqa
 from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, TIMESTAMP
 
 # fake random index name in case of not explicitly indexed data
-PANDABASE_DEFAULT_INDEX = 'pandabase_default_index_237856037524875'
+PANDABASE_DEFAULT_INDEX = 'pandabase_auto_generated_index'
 
 
 def _sqa_type2pandas_type(sqa_dtype, index=False):
@@ -170,12 +170,12 @@ def get_column_dtype(column, pd_or_sqla, index=False):
         raise ValueError(f'Select pd_or_sqla must equal either "pd" or "sqla"')
 
 
-def has_table(con, table_name, schema = None):
+def has_table(con, table_name, schema=None):
     """returns True if a table exactly named table_name exists in con"""
     engine = engine_builder(con)
     
     if schema is not None:
-        return engine.run_callable(engine.dialect.has_table, table_name, schema = schema)
+        return engine.run_callable(engine.dialect.has_table, table_name, schema=schema)
     else:
         return engine.run_callable(engine.dialect.has_table, table_name)
 
@@ -192,7 +192,10 @@ def clean_name(name):
 def make_clean_columns_dict(df: pd.DataFrame, autoindex=False):
     """Takes a DataFrame, returns a dictionary {column_names: {column info dicts}}
 
-    if autoindex, include an additional new Integer column named PANDABASE_DEFAULT_INDEX
+    if autoindex is True:
+        if multi-index:
+            fail; must reset_index first
+        include an additional new Integer column named PANDABASE_DEFAULT_INDEX and discard df.index
 
     Example:
         >>> import pandas as pd
@@ -214,15 +217,27 @@ def make_clean_columns_dict(df: pd.DataFrame, autoindex=False):
     df.columns = [clean_name(col) for col in df.columns]
 
     # get index info
-    if not autoindex:
-        index_name = clean_name(df.index.name)
-        if df.index.name in df.columns:
-            raise NameError(f'index column name is duplicate of column name: {df.index.name}')
-        columns[index_name] = {'dtype': get_column_dtype(df.index, 'sqla', index=True),
-                               'pk': True}
-    else:
+    if autoindex:
+        if isinstance(df.index, pd.MultiIndex):
+            raise ValueError(f'Must reset_index to use autoindex=True')
+
         index_name = PANDABASE_DEFAULT_INDEX
         columns[index_name] = {'dtype': Integer,
+                               'pk': True}
+
+    elif isinstance(df.index, pd.MultiIndex):
+        indices = df[[]].reset_index(drop=False)
+        for col_name in indices.columns:
+            index_name = clean_name(col_name)
+            if col_name in df.columns:
+                raise NameError(f'MultiIndex name is duplicate of column name: {col_name}')
+            columns[index_name] = {'dtype': get_column_dtype(indices[col_name], 'sqla', index=True),
+                                   'pk': True}
+    else:
+        index_name = clean_name(df.index.name)
+        if df.index.name in df.columns:
+            raise NameError(f'index name is duplicate of column name: {df.index.name}')
+        columns[index_name] = {'dtype': get_column_dtype(df.index, 'sqla', index=True),
                                'pk': True}
 
     # get column info

@@ -13,12 +13,24 @@ def test_same_companda_copy1(simple_df):
     assert companda(simple_df, simple_df.copy())
 
 
+def test_same_companda_select(simple_df):
+    assert companda(simple_df[sorted(simple_df.columns)], simple_df)
+
+
 def test_same_companda2(minimal_df):
     assert companda(minimal_df, minimal_df)
 
 
 def test_same_companda_copy2(minimal_df):
     assert companda(minimal_df, minimal_df.copy())
+
+
+def test_same_companda_multi(multi_index_df):
+    assert companda(multi_index_df, multi_index_df)
+
+
+def test_same_companda_multi_copy(multi_index_df):
+    assert companda(multi_index_df, multi_index_df.copy())
 
 
 def test_same_companda_cols1(minimal_df):
