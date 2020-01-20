@@ -16,6 +16,7 @@ Tested under Python>=3.6, with new versions of Pandas (>= 0.24) SQLAlchemy (>= 1
 * pandabase.read_sql replaces pd.read_sql
 * primary key support:
     * by default, uses df.index (with name != None) as table PK
+    * basic support for multi-indexes
     * optionally, generates new integer index (with parameter auto_index=True)
 * multiple insert modes: how='create_only', 'upsert', or 'append'
 * datatypes (all nullable): 

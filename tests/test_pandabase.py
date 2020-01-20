@@ -541,8 +541,7 @@ def test_upsert_coerce_float(pandabase_loaded_db, constants):
     assert isinstance(loaded.loc[1, 'float'], float)
 
 
-@pytest.mark.parametrize('how', ['append', 'upsert'])
-def test_coerce_integer(pandabase_loaded_db, how, constants):
+def test_coerce_integer(pandabase_loaded_db, constants):
     """insert an integer into float column"""
     assert pb.has_table(pandabase_loaded_db, constants.TABLE_NAME)
 
@@ -560,6 +559,26 @@ def test_coerce_integer(pandabase_loaded_db, how, constants):
 
     loaded = pb.read_sql(constants.TABLE_NAME, con=pandabase_loaded_db)
     assert loaded.loc[1, 'integer'] == 77
+
+
+def test_coerce_bool(pandabase_loaded_db, constants):
+    """insert a bool into float column"""
+    assert pb.has_table(pandabase_loaded_db, constants.TABLE_NAME)
+
+    df = pd.DataFrame(index=[1], columns=['float'], data=[[True]])
+    df.index.name = constants.SAMPLE_INDEX_NAME
+    types = df.dtypes
+
+    pb.to_sql(df,
+              table_name=constants.TABLE_NAME,
+              con=pandabase_loaded_db,
+              how='upsert')
+
+    for col in df.columns:
+        assert types[col] == df.dtypes[col]
+
+    loaded = pb.read_sql(constants.TABLE_NAME, con=pandabase_loaded_db)
+    assert loaded.loc[1, 'float'] == 1
 
 
 @pytest.mark.parametrize('how', ['append', 'upsert'])
@@ -767,6 +786,14 @@ def test_add_column_to_database(pandabase_loaded_db, actually_do, constants):
         assert is_integer_dtype(df[name])
     else:
         assert name not in df.columns
+
+
+def test_drop_table(pandabase_loaded_db):
+    names = pb.get_db_table_names(pandabase_loaded_db)
+    for name in names:
+        assert pb.has_table(pandabase_loaded_db, table_name=name)
+        pb.drop_db_table(con=pandabase_loaded_db, table_name=name)
+        assert not pb.has_table(pandabase_loaded_db, table_name=name)
 
 
 def test_get_tables(pandabase_loaded_db, constants):
