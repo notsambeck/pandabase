@@ -214,9 +214,12 @@ def test_select_fails_multi_index(empty_db, multi_index_df, lowest):
                                             ((0, 100.0), 0),
                                             ((100, 0.0), 0),
                                             ((0, 0), 6),
+                                            ((0, None), 6),
+                                            ((None, 0), 6),
                                             ((1, 0.1), 5),
                                             ((-1, 0.1), 5),
                                             ((1, -900), 5),
+                                            ((1, None), 5),
                                             ])
 def test_select_some_multi_index(empty_db, multi_index_df, lowest, length):
     """add a new minimal table & read it back with pandabase - select all"""

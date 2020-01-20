@@ -54,7 +54,7 @@ def to_sql(df: pd.DataFrame, *,
         df : DataFrame
         ### keyword only args follow ###
         table_name : string; Name of SQL table.
-        con : connection; database string URI < OR > sa.engine
+        con : connection; database string URI < OR > sqlalchemy.engine
         auto_index: bool, default False. if True, ignore existing df.index, make a new integer index
         add_new_columns: bool, default False. if True, add any new columns as required by the DataFrame.
         how : {'create_only', 'upsert', 'append'}, default 'create_only'
@@ -320,12 +320,13 @@ def read_sql(table_name: str,
     Args:
         table_name:
         con:
-        lowest: inclusive
-        highest: inclusive
+        lowest: minimum value of PK to select (inclusive)
+        highest: maximum value of PK to select (inclusive)
+            for MultiIndex tables, highest and lowest must be tuples of all primary key values (left to right) or None
         schema: Specify the schema (if database flavor supports this). If None, use default schema.
 
     Returns:
-        DataFrame of selected data with table.primary_key as index
+        DataFrame: selected data with table.primary_key(s) as index
     """
     engine = engine_builder(con)
     meta = sqa.MetaData(bind=engine)
@@ -379,7 +380,9 @@ def read_sql(table_name: str,
                                  'filter only on the first index dimension.')
 
             for i, val in enumerate(selector):
-                if sign == 'lowest':
+                if val is None:
+                    continue
+                elif sign == 'lowest':
                     s = s.where(pks[i][1] >= val)
                 else:
                     s = s.where(pks[i][1] <= val)

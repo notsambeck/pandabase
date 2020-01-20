@@ -9,15 +9,16 @@ By default, uses DataFrame.index as the primary key. By using an explicit primar
 
 Designed for especially for time-series datasets that need to be updated over time and stored to disk, but are used primarily in-memory for computation. All supported types can be a value or Null, nice for ML applications.
 
-Tested under Python>=3.6, with new versions of Pandas (>= 0.24) SQLAlchemy (>= 1.3). Works with SQLite and postgres - requires psycopg2 and postgres>=8.
+Tested under Python>=3.6, with new versions of Pandas (>= 0.24) SQLAlchemy (>= 1.3). Works with SQLite and (new in 0.3) postgres - requires psycopg2 and postgres>=8.
 
 ### Features
 * pandabase.to_sql replaces df.to_sql
 * pandabase.read_sql replaces pd.read_sql
 * primary key support:
     * by default, uses df.index (with name != None) as table PK
-    * basic support for multi-indexes
-    * optionally, generates new integer index (with parameter auto_index=True)
+    * filter results with lowest/highest: lowest <= results.pk <= highest 
+    * (new in 0.4): basic support for multi-indexes
+    * optionally, can generate new integer index (with parameter auto_index=True)
 * multiple insert modes: how='create_only', 'upsert', or 'append'
 * datatypes (all nullable): 
     * boolean
@@ -96,6 +97,14 @@ new_sqlite_db.sqlite
 11  0.406995
 ```
 
+Addtional keyword arguments for pandabase.read_sql:
+
+[lowest, highest]: minimum/maximum values for PK that will be retrieved. Can be used independently of each other.
+
+For multi-index tables, use e.g. highest=(max_value_for_pk0, max_value_for_pk1, ), lowest=(min_value_for_pk0, min_value_for_pk1, )
+
+Minor bug: note that selecting an empty subset of data will raise an error if type(lowest) != type(data), even if the types are comparible (e.g. float vs. int)
+
 ### Using Extra Features
 Companda - rich comparisons of DataFrames. call companda on two DataFrames, get a Companda object back (that evaluates to True/False).
 
@@ -119,7 +128,7 @@ Table tools: pandabase.
 * add_columns_to_db(new_col, table_name, con):
     * """Make new columns as needed with ALTER TABLE (pandabase.to_sql can do this automatically during insertion with kwarg: add_new_columns=True)"""
 * drop_db_table(table_name, con):
-    * """Drop table [table_name] from con"""
+    * """Drop table [table_name] from con - be careful!"""
 * get_db_table_names(con):
     * """get a list of table names from database"""
 * get_table_column_names(con, table_name):
