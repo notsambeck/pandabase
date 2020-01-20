@@ -62,6 +62,7 @@ def pytest_collection_modifyitems(config, items):
 
 @pytest.fixture(scope='session')
 def constants():
+    """constants so they can be used across tests"""
     d = {
         'FILE1': FILE1,
         'FILE2': FILE2,
@@ -77,7 +78,7 @@ def constants():
                                           pytest.param('postgresql+psycopg2://postgres:postgres@localhost:5432/testdb',
                                                        marks=pytest.mark.postgres), ])
 def empty_db(request):
-    """In-memory database fixture; not persistent"""
+    """In-memory database fixture; not persistent i.e. always empty when called"""
     if 'sqlite' not in request.param:
         e = pb.engine_builder(request.param)
         meta = sa.MetaData()

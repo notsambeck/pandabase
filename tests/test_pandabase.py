@@ -101,8 +101,8 @@ def test_select_pandas_table(pandas_loaded_db, simple_df, constants):
     """using pandabase.read_sql:
     read pandas-written table containing simple_df,
 
-    this test fails because: when pandas writes the entry, it does not create
-    an explicit primary key. the table is treated as a multiindex"""
+    this test is weird because: when pandas writes the entry, it does not create
+    an explicit primary key. the table is treated as a multiindex. hence code in middle"""
     assert has_table(pandas_loaded_db, constants.TABLE_NAME)
 
     df = pb.read_sql(constants.TABLE_NAME, pandas_loaded_db)
@@ -171,6 +171,11 @@ def test_create_table_multi_index(empty_db, multi_index_df):
     # print(table.columns)
     assert table.columns['this'].primary_key
     assert table.columns['that'].primary_key
+
+    loaded = pb.read_sql(con=empty_db, table_name='sample_mi')
+    print('\n', loaded)
+
+    assert companda(multi_index_df, loaded)
 
 
 @pytest.mark.parametrize('how, qty', [('create_only', 3000),

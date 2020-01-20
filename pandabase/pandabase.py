@@ -362,31 +362,47 @@ def read_sql(table_name: str,
         if len(data) == 0:
             if not isinstance(lowest, pk.type.python_type) or not isinstance(highest, pk.type.python_type):
                 raise TypeError(f'Select range is: {lowest} <= data <= {highest}; type of column is {pk.type}')
+    elif len(table.primary_key.columns) > 1:
+        if highest is None and lowest is None:
+            s = table.select()
+        else:
+            raise NotImplementedError('can only select multi-index tables in their entirety')
+        result = engine.execute(s)
+        data = result.fetchall()
+
     else:
-        raise NotImplementedError('pandabase is not compatible with multi-index tables')
+        raise ValueError(f'Error: table.primary_key.columns = {table.primary_key.columns}')
 
     df = pd.DataFrame.from_records(data, columns=[col.name for col in table.columns],
                                    coerce_float=True)
 
+    indices = []  # for multi-index
     for col in table.columns:
         # deal with primary key first; never convert primary key to nullable
         if col.primary_key:
-            # print(f'index column is {col.name}')
-            df.index = df[col.name]
             dtype = get_column_dtype(col, pd_or_sqla='pd', index=True)
-            # force all dates to utc
-            if is_datetime64_any_dtype(dtype):
-                # print(df.index.tz, 'PK - old...')
-                df.index = pd.to_datetime(df[col.name].values, utc=True)
-                # print(df.index.tz, 'PK - new')
+            if len(table.primary_key.columns) == 1:
+                df.index = df[col.name]
 
-            if col.name == PANDABASE_DEFAULT_INDEX:
-                df.index.name = None
+                if is_datetime64_any_dtype(dtype):
+                    df.index = pd.to_datetime(df[col.name].values, utc=True)
+
+                if col.name == PANDABASE_DEFAULT_INDEX:
+                    df.index.name = None
+                else:
+                    df.index.name = col.name
+
+                df = df.drop(columns=[col.name])
+                continue
+
             else:
-                df.index.name = col.name
+                indices.append(df[col.name].copy())
 
-            df = df.drop(columns=[col.name])
-            continue
+                if is_datetime64_any_dtype(dtype):
+                    indices[-1] = pd.to_datetime(indices[-1].values, utc=True)
+
+                df = df.drop(columns=[col.name])
+                continue
         else:
             # print(f'non-pk column: {col}')
             dtype = get_column_dtype(col, pd_or_sqla='pd')
@@ -395,6 +411,10 @@ def read_sql(table_name: str,
                 # print(df[col.name].dt.tz, 'regular col - old...')
                 df[col.name] = pd.to_datetime(df[col.name].values, utc=True)
                 # print(df[col.name].dt.tz, 'regular col - new')
+
+        # generate multi_index
+        if indices:
+            df.index = pd.MultiIndex.from_arrays(indices)
 
         # convert other dtypes to nullable
         if is_bool_dtype(dtype) or is_integer_dtype(dtype):
