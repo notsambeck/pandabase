@@ -361,26 +361,44 @@ def read_sql(table_name: str,
 
         if len(data) == 0:
             if not isinstance(lowest, pk.type.python_type) or not isinstance(highest, pk.type.python_type):
-                raise TypeError(f'Select range is: {lowest} <= data <= {highest}; type of column is {pk.type}')
+                raise TypeError(f'Select range is: {lowest} <= data <= {highest}; but type of column is {pk.type}')
+
     elif len(table.primary_key.columns) > 1:
-        if highest is None and lowest is None:
-            s = table.select()
-        else:
-            raise NotImplementedError('can only select multi-index tables in their entirety')
+        pks = table.primary_key.columns.items()
+
+        s = table.select()
+
+        for selector, sign in [(highest, 'highest'), (lowest, 'lowest')]:
+            if selector is None:
+                continue
+
+            if len(selector) != len(pks):
+                raise ValueError('pandabase.read_sql(multi-indexed_table) requires any values of highest, lowest '
+                                 'that are not None to have __len__ equal to len(index). Use e.g. (value, None) to '
+                                 'filter only on the first index dimension.')
+
+            for i, val in enumerate(selector):
+                if sign == 'lowest':
+                    s = s.where(pks[i][1] >= val)
+                else:
+                    s = s.where(pks[i][1] <= val)
+
         result = engine.execute(s)
         data = result.fetchall()
 
     else:
-        raise ValueError(f'Error: table.primary_key.columns = {table.primary_key.columns}')
+        raise ValueError(f'invalid table.primary_key.columns = {table.primary_key.columns}')
 
     df = pd.DataFrame.from_records(data, columns=[col.name for col in table.columns],
                                    coerce_float=True)
 
-    indices = []  # for multi-index
+    indices = []  # in case of multi-index, accumulate columns and assemble later
     for col in table.columns:
-        # deal with primary key first; never convert primary key to nullable
+        # deal with primary keys separately; never convert primary key to nullable
         if col.primary_key:
             dtype = get_column_dtype(col, pd_or_sqla='pd', index=True)
+
+            # single index
             if len(table.primary_key.columns) == 1:
                 df.index = df[col.name]
 
@@ -395,6 +413,7 @@ def read_sql(table_name: str,
                 df = df.drop(columns=[col.name])
                 continue
 
+            # multi-index
             else:
                 indices.append(df[col.name].copy())
 
@@ -412,10 +431,6 @@ def read_sql(table_name: str,
                 df[col.name] = pd.to_datetime(df[col.name].values, utc=True)
                 # print(df[col.name].dt.tz, 'regular col - new')
 
-        # generate multi_index
-        if indices:
-            df.index = pd.MultiIndex.from_arrays(indices)
-
         # convert other dtypes to nullable
         if is_bool_dtype(dtype) or is_integer_dtype(dtype):
             df[col.name] = np.array(df[col.name], dtype=float)
@@ -424,6 +439,10 @@ def read_sql(table_name: str,
             pass
         elif is_string_dtype(col):
             pass
+
+    # generate multi_index
+    if indices:
+        df.index = pd.MultiIndex.from_arrays(indices)
 
     return df
 

@@ -15,8 +15,9 @@ from pandabase.helpers import *
 from pandabase.companda import companda
 
 import pytz
+
 UTC = pytz.utc
-LA_TZ = pytz.timezone('America/Los_Angeles')    # test timezone
+LA_TZ = pytz.timezone('America/Los_Angeles')  # test timezone
 
 bad_df = pd.DataFrame(index=[2, 2], data=['x', 'y'])
 bad_df.index.name = 'bad_index'
@@ -178,6 +179,45 @@ def test_create_table_multi_index(empty_db, multi_index_df):
     assert companda(multi_index_df, loaded)
 
 
+def test_select_all_multi_index(empty_db, multi_index_df):
+    """add a new minimal table & read it back with pandabase - select all"""
+    table = pb.to_sql(multi_index_df,
+                      table_name='sample_mi',
+                      con=empty_db,
+                      how='create_only',
+                      )
+
+    # print(table.columns)
+    assert table.columns['this'].primary_key
+    assert table.columns['that'].primary_key
+
+    loaded = pb.read_sql(con=empty_db, table_name='sample_mi', highest=(100, 100), lowest=(0, 0))
+    print('\n', loaded)
+
+    assert companda(multi_index_df, loaded)
+
+
+@pytest.mark.parametrize('lowest, length', [((100, 100), 0),
+                                            ((0, 100), 0),
+                                            ((100, 0), 0),
+                                            ((0, 0), 6),
+                                            ((1, 0.1), 5),
+                                            ((1, -900), 5),
+                                            ])
+def test_select_some_multi_index(empty_db, multi_index_df, lowest, length):
+    """add a new minimal table & read it back with pandabase - select all"""
+    table = pb.to_sql(multi_index_df,
+                      table_name='sample_mi',
+                      con=empty_db,
+                      how='create_only',
+                      )
+
+    loaded = pb.read_sql(con=empty_db, table_name='sample_mi', highest=(1000, 1000), lowest=lowest)
+    print('\n', loaded)
+
+    assert len(loaded) == length
+
+
 @pytest.mark.parametrize('how, qty', [('create_only', 3000),
                                       ('upsert', 1000)])
 def test_write_time(empty_db, how, qty):
@@ -190,7 +230,7 @@ def test_write_time(empty_db, how, qty):
               auto_index=True,
               )
     end = pd.datetime.utcnow()
-    assert end-start < pd.Timedelta(seconds=2)
+    assert end - start < pd.Timedelta(seconds=2)
 
 
 def test_create_select_table_index(session_db, simple_df, constants):
@@ -601,7 +641,7 @@ def test_new_column_all_nan(pandabase_loaded_db, df_with_all_nan_col, constants)
     """insert into a new column"""
     assert pb.has_table(pandabase_loaded_db, constants.TABLE_NAME)
 
-    df_with_all_nan_col.index = range(100,100+len(df_with_all_nan_col))
+    df_with_all_nan_col.index = range(100, 100 + len(df_with_all_nan_col))
     df_with_all_nan_col.index.name = constants.SAMPLE_INDEX_NAME
 
     pb.to_sql(df_with_all_nan_col,
@@ -810,7 +850,7 @@ def test_get_columns(pandabase_loaded_db, simple_df, constants):
 
 def test_describe_db(pandabase_loaded_db, constants):
     desc = pb.describe_database(pandabase_loaded_db)
-    assert len(desc) == 1                        # 1 table in sample db
-    assert desc[constants.TABLE_NAME]['min'] == 0    # min
-    assert desc[constants.TABLE_NAME]['max'] == 5    # max
-    assert desc[constants.TABLE_NAME]['count'] == 6    # count
+    assert len(desc) == 1  # 1 table in sample db
+    assert desc[constants.TABLE_NAME]['min'] == 0  # min
+    assert desc[constants.TABLE_NAME]['max'] == 5  # max
+    assert desc[constants.TABLE_NAME]['count'] == 6  # count
