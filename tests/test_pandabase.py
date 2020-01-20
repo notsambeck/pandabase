@@ -197,11 +197,25 @@ def test_select_all_multi_index(empty_db, multi_index_df):
     assert companda(multi_index_df, loaded)
 
 
-@pytest.mark.parametrize('lowest, length', [((100, 100), 0),
-                                            ((0, 100), 0),
-                                            ((100, 0), 0),
+@pytest.mark.parametrize('lowest', [(100, 100, 100), (10, ), ('cat', 'dog', ), (1, 'hat'), ('d', 10)])
+def test_select_fails_multi_index(empty_db, multi_index_df, lowest):
+    """add a new minimal table & read it back with pandabase - select all"""
+    pb.to_sql(multi_index_df,
+              table_name='sample_mi',
+              con=empty_db,
+              how='create_only',
+              )
+
+    with pytest.raises(Exception):
+        pb.read_sql(con=empty_db, table_name='sample_mi', highest=(1000, 1000), lowest=lowest)
+
+
+@pytest.mark.parametrize('lowest, length', [((100, 100.0), 0),
+                                            ((0, 100.0), 0),
+                                            ((100, 0.0), 0),
                                             ((0, 0), 6),
                                             ((1, 0.1), 5),
+                                            ((-1, 0.1), 5),
                                             ((1, -900), 5),
                                             ])
 def test_select_some_multi_index(empty_db, multi_index_df, lowest, length):

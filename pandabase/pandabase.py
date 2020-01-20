@@ -361,7 +361,8 @@ def read_sql(table_name: str,
 
         if len(data) == 0:
             if not isinstance(lowest, pk.type.python_type) or not isinstance(highest, pk.type.python_type):
-                raise TypeError(f'Select range is: {lowest} <= data <= {highest}; but type of column is {pk.type}')
+                raise TypeError(f'Select range is: {lowest} <= data <= {highest}; but type of column is {pk.type}. '
+                                f'If e.g. cutoffs are integers, and column is float, please coerce type.')
 
     elif len(table.primary_key.columns) > 1:
         pks = table.primary_key.columns.items()
@@ -386,6 +387,14 @@ def read_sql(table_name: str,
         result = engine.execute(s)
         data = result.fetchall()
 
+        if len(data) == 0:
+            for i, (pk, col) in enumerate(table.primary_key.columns.items()):
+                if isinstance(lowest[i], col.type.python_type) or isinstance(highest[i], col.type.python_type):
+                    continue
+                else:
+                    raise TypeError(f'Select range is: {lowest[i]} <= data <= {highest[i]}; '
+                                    f'but type of column is {col.type.python_type}')
+
     else:
         raise ValueError(f'invalid table.primary_key.columns = {table.primary_key.columns}')
 
@@ -405,7 +414,8 @@ def read_sql(table_name: str,
                 if is_datetime64_any_dtype(dtype):
                     df.index = pd.to_datetime(df[col.name].values, utc=True)
 
-                if col.name == PANDABASE_DEFAULT_INDEX:
+                # auto-handle legacy index name with random number suffix
+                if col.name == PANDABASE_DEFAULT_INDEX or col.name[:23] == 'pandabase_default_index':
                     df.index.name = None
                 else:
                     df.index.name = col.name
@@ -447,7 +457,7 @@ def read_sql(table_name: str,
     return df
 
 
-def add_columns_to_db(new_col, table_name, con, schema = None):
+def add_columns_to_db(new_col, table_name, con, schema=None):
     """Make new columns as needed with ALTER TABLE, as a weak substitute for migrations"""
     engine = engine_builder(con)
     name = clean_name(new_col.name)
@@ -484,7 +494,7 @@ def get_db_table_names(con, schema=None):
     """get a list of table names from con (or con.schema, if schema kwarg is supplied)"""
     meta = sqa.MetaData()
     engine = engine_builder(con)
-    meta.reflect(bind = engine, schema = schema)
+    meta.reflect(bind=engine, schema=schema)
     return list(meta.tables.keys())
 
 
@@ -516,7 +526,7 @@ def describe_database(con, schema=None):
     """
     engine = engine_builder(con)
     meta = sqa.MetaData()
-    meta.reflect(bind = engine, schema=schema)
+    meta.reflect(bind=engine, schema=schema)
 
     res = {}
 
