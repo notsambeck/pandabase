@@ -272,22 +272,12 @@ def _insert(table: sqa.Table,
         df = cleaned_data.dropna(axis=1, how='all')
 
         if not auto_index:
-            for index, row in df.reset_index(drop=False).iterrows():
-                # replace pd.NaT (NULL value for datetimes in pandas) to None at the row level
-                # this is necessary because pd.NaT will cause an exception (invalid datetime)
-                # also this seems to only work at the row level
-                # since pandas will automatically coerce NULLs in a Series of datetimes to pd.NaT
-                # TODO: with logging.getLogger turned on, the following statement changes None to pd.nan. important?
-                row = row.map(lambda val: None if val is pd.NaT else val)
-
-                rows.append({**row.to_dict()})
+            for row in df.reset_index(drop=False).itertuples(index=False):
+                rows.append(row._asdict())
             con.execute(table.insert(), rows)
         else:
-            for index, row in df.reset_index(drop=True).iterrows():
-                # do the same operation as in the case "if not auto_index" (see above) for pd.NaT 
-                row = row.map(lambda val: None if val is pd.NaT else val)
-                
-                rows.append({**row.to_dict()})
+            for row in df.reset_index(drop=True).itertuples(index=False):
+                rows.append(row._asdict())
             con.execute(table.insert(), rows)
 
 
