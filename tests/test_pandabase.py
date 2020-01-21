@@ -72,12 +72,20 @@ def test_select_pandas_table(pandas_loaded_db, simple_df, constants):
     assert companda(df, simple_df)
 
 
-def test_create_table_no_index_load_pandas(empty_db, minimal_df):
-    """add a new minimal table, read with Pandas"""
+@pytest.mark.parametrize('as_type, how', [[False, 'upsert'],
+                                          [True, 'upsert'],
+                                          [False, 'create_only'],
+                                          [True, 'create_only']]
+                         )
+def test_create_table_no_index_load_pandas(empty_db, minimal_df, as_type, how):
+    """add a new minimal table to db, read with Pandas"""
+    if as_type:
+        minimal_df['integer'] = minimal_df['integer'].astype('Int64')
+
     table = pb.to_sql(minimal_df,
                       table_name='sample',
                       con=empty_db,
-                      how='create_only',
+                      how=how,
                       auto_index=True,
                       )
 
@@ -147,7 +155,7 @@ def test_select_all_multi_index(empty_db, multi_index_df):
     assert companda(multi_index_df, loaded)
 
 
-@pytest.mark.parametrize('lowest', [(100, 100, 100), (10, ), ('cat', 'dog', ), (1, 'hat'), ('d', 10)])
+@pytest.mark.parametrize('lowest', [(100, 100, 100), (10,), ('cat', 'dog',), (1, 'hat'), ('d', 10)])
 def test_select_fails_multi_index(empty_db, multi_index_df, lowest):
     """add a new minimal table & read it back with pandabase - select all"""
     pb.to_sql(multi_index_df,
@@ -526,7 +534,7 @@ def test_upsert_new_cols(pandabase_loaded_db, constants, col_to_duplicate):
     assert 'bonus_col' in df.columns
 
 
-def test_upsert_coerce_float(pandabase_loaded_db, constants):
+def test_upsert_coerce_int_to_float(pandabase_loaded_db, constants):
     """insert an integer into float column"""
     assert pb.has_table(pandabase_loaded_db, constants.TABLE_NAME)
 
@@ -548,8 +556,8 @@ def test_upsert_coerce_float(pandabase_loaded_db, constants):
     assert isinstance(loaded.loc[1, 'float'], float)
 
 
-def test_coerce_integer(pandabase_loaded_db, constants):
-    """insert an integer into float column"""
+def test_coerce_float_to_integer(pandabase_loaded_db, constants):
+    """insert a float into integer column"""
     assert pb.has_table(pandabase_loaded_db, constants.TABLE_NAME)
 
     df = pd.DataFrame(index=[1], columns=['integer'], data=[[77.0]])
@@ -566,6 +574,34 @@ def test_coerce_integer(pandabase_loaded_db, constants):
 
     loaded = pb.read_sql(constants.TABLE_NAME, con=pandabase_loaded_db)
     assert loaded.loc[1, 'integer'] == 77
+
+
+# This test fails due to 'unconsumed columns' (sqlalchemy CompileError)
+@pytest.mark.skip
+def test_coerce_float_to_integer_multi(multi_index_df, empty_db, constants):
+    """insert a float into integer column"""
+    mi = multi_index_df.copy().index
+    assert mi.names[0] is not None
+    assert mi.names[1] is not None
+    pb.to_sql(multi_index_df, con=empty_db, table_name=constants.TABLE_NAME)
+
+    df = pd.DataFrame(columns=['integer'], data=[[77.0]], index=mi[:1])
+    assert df.index.names[0] is not None
+    assert df.index.names[1] is not None
+    print('\n', df)
+    print()
+    types = df.dtypes
+
+    pb.to_sql(df,
+              table_name=constants.TABLE_NAME,
+              con=empty_db,
+              how='upsert')
+
+    for col in df.columns:
+        assert types[col] == df.dtypes[col]
+
+    loaded = pb.read_sql(constants.TABLE_NAME, con=empty_db)
+    assert loaded.loc[mi[0], 'integer'] == 77
 
 
 def test_coerce_bool(pandabase_loaded_db, constants):

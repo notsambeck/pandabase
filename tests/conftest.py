@@ -218,7 +218,6 @@ def multi_index_df():
     df.date = pd.date_range(pd.to_datetime('2001-01-01 12:00am', utc=True), periods=rows, freq='h', tz=UTC)
 
     df.integer = range(777, rows+777)
-    # df.integer = df.integer.astype(pd.Int64Dtype())   # nullable int is converted to Object as an index
 
     df.float = [float(i) / 10 for i in range(rows)]
     df.float = df.float.astype(pd.np.float)

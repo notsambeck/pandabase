@@ -269,8 +269,8 @@ def _insert(table: sqa.Table,
     with engine.begin() as con:
         rows = []
         
-        # remove completely null columns
-        df = cleaned_data.dropna(axis=1, how='all')
+        # remove completely null columns; convert to object due to bug inserting Int64
+        df = cleaned_data.dropna(axis=1, how='all').astype('object')
 
         if not auto_index:
             for row in df.reset_index(drop=False).itertuples(index=False):
