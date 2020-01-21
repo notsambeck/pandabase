@@ -100,7 +100,8 @@ def to_sql(df: pd.DataFrame, *,
 
         if isinstance(df.index, pd.MultiIndex):
             for val in df.index.names:
-                assert val is not None
+                if val is None:
+                    raise NameError(f'One or more values in MultiIndex is unnamed: {df.index.names}')
 
         else:
             if df.index.name is None:
@@ -536,14 +537,17 @@ def describe_database(con, schema=None):
     for table_name in meta.tables:
         try:
             table = Table(table_name, meta, autoload=True, autoload_with=engine)
-            index = table.primary_key.columns.items()
-            if len(index) != 1:
-                raise ValueError(f'Invalid index for table {table_name}: {index}')
-            index = index[0][0]
-            minim = engine.execute(sqa.select([sqa.func.min(sqa.text(index))]).select_from(table)).scalar()
-            maxim = engine.execute(sqa.select([sqa.func.max(sqa.text(index))]).select_from(table)).scalar()
-            count = engine.execute(sqa.select([sqa.func.count()]).select_from(table)).scalar()
-            res[table_name] = {'min': minim, 'max': maxim, 'count': count}
+            index = table.primary_key.columns
+            if len(index) == 1:
+                index = index.items()[0][0]
+                minim = engine.execute(sqa.select([sqa.func.min(sqa.text(index))]).select_from(table)).scalar()
+                maxim = engine.execute(sqa.select([sqa.func.max(sqa.text(index))]).select_from(table)).scalar()
+                count = engine.execute(sqa.select([sqa.func.count()]).select_from(table)).scalar()
+                res[table_name] = {'min': minim, 'max': maxim, 'count': count}
+            else:
+                count = engine.execute(sqa.select([sqa.func.count()]).select_from(table)).scalar()
+                res[table_name] = {'index_type': 'multi', 'index_cols': str(index.keys()), 'count': count}
+
         except Exception as e:
             print(f'failed to describe table: {table_name} due to {e}')
 
