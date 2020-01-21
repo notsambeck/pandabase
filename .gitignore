@@ -9,7 +9,7 @@ htmlcov/
 
 #log files
 test_log.log
-tests/test_log.log
+tests/test_data/test_log.log
 
 #python
 *.pyc
