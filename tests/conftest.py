@@ -28,7 +28,7 @@ set_option('expand_frame_repr', True)
 
 TABLE_NAME = 'sample_table_name'
 SAMPLE_INDEX_NAME = 'sample_named_integer_index'
-TEST_LOG = join('tests', 'test_log.log')
+TEST_LOG = join('tests', 'test_data', 'test_log.log')
 # rewrite logfile following each test
 basicConfig(level=DEBUG, filename=TEST_LOG, filemode='w')
 
