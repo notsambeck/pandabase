@@ -119,12 +119,13 @@ def test_create_read_table_no_index(empty_db, minimal_df):
     assert pb.companda(loaded, minimal_df, ignore_index=True)
 
 
-def test_create_table_multi_index(empty_db, multi_index_df):
+@pytest.mark.parametrize('how', ['create_only', 'upsert'])
+def test_create_table_multi_index(empty_db, multi_index_df, how):
     """add a new minimal table & read it back with pandabase"""
     table = pb.to_sql(multi_index_df,
                       table_name='sample_mi',
                       con=empty_db,
-                      how='create_only',
+                      how=how,
                       )
 
     # print(table.columns)
@@ -576,8 +577,6 @@ def test_coerce_float_to_integer(pandabase_loaded_db, constants):
     assert loaded.loc[1, 'integer'] == 77
 
 
-# This test fails due to 'unconsumed columns' (sqlalchemy CompileError)
-@pytest.mark.skip
 def test_coerce_float_to_integer_multi(multi_index_df, empty_db, constants):
     """insert a float into integer column"""
     mi = multi_index_df.copy().index
