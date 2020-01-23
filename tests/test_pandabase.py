@@ -457,11 +457,14 @@ def test_upsert_incomplete_rows(pandabase_loaded_db, constants):
 
 
 def test_upsert_individual_values1(pandabase_loaded_db, constants):
-    """upsert to update rows with only 1 of 5 values (and index) from full dataframe"""
+    """upsert to update rows with only 1 of 5 values (and index) from full dataframe.
+
+    Prior to 0.4.2, this test was incorrect - inserting NaN resulted in no change.
+    """
     assert pb.has_table(pandabase_loaded_db, constants.TABLE_NAME)
 
     df = pb.read_sql(constants.TABLE_NAME, con=pandabase_loaded_db)
-    df2 = pd.DataFrame(index=df.index, columns=df.columns)
+    df2 = pd.DataFrame(index=df.index[:4], columns=df.columns)
     for col in df2.columns:
         df2[col] = df2[col].astype(df[col].dtype)
 
@@ -478,12 +481,9 @@ def test_upsert_individual_values1(pandabase_loaded_db, constants):
     # check against pandabase read
     loaded = pb.read_sql(constants.TABLE_NAME, con=pandabase_loaded_db)
 
-    df.loc[df.index[0], 'float'] = 9.9
-    df.loc[df.index[1], 'integer'] = 999
-    df.loc[df.index[2], 'string'] = 'nah'
-    df.loc[df.index[3], 'date'] = pd.to_datetime('1968-01-01', utc=True)
+    print(loaded)
 
-    assert companda(df, loaded)
+    assert companda(df2, loaded.loc[df2.index])
 
 
 def test_upsert_individual_values2(pandabase_loaded_db, constants):

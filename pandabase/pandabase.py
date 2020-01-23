@@ -300,10 +300,14 @@ def _upsert(table: sqa.Table,
 
     cleaned_data = cleaned_data.astype('object')
 
+    def map2none(val):
+        if pd.notna(val):
+            return val
+
     with engine.begin() as con:
         for row in cleaned_data.reset_index(drop=False).itertuples(index=False):
             # check index uniqueness by attempting insert; if it fails, update
-            row = row._asdict()
+            row = {k: map2none(v) for k, v in row._asdict().items()}
             try:
 
                 if engine.dialect.dbapi.__name__ == 'psycopg2':
