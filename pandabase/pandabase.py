@@ -289,14 +289,26 @@ def _upsert(table: sqa.Table,
     insert data into a table, replacing any duplicate indices
     postgres - see: https://docs.sqlalchemy.org/en/13/dialects/postgresql.html#insert-on-conflict-upsert
     """
+    if isinstance(cleaned_data.index, pd.MultiIndex):
+        multi = True
+        names = cleaned_data.index.names
+        index_elements = names
+    else:
+        multi = False
+        names = cleaned_data.index.name
+        index_elements = [names]
+
+    cleaned_data = cleaned_data.astype('object')
+
     with engine.begin() as con:
-        for index, row in cleaned_data.iterrows():
+        for row in cleaned_data.reset_index(drop=False).itertuples(index=False):
             # check index uniqueness by attempting insert; if it fails, update
-            row = {**row.dropna().to_dict(), cleaned_data.index.name: index}
+            row = row._asdict()
             try:
+
                 if engine.dialect.dbapi.__name__ == 'psycopg2':
                     insert = pg_insert(table).values(row).on_conflict_do_update(
-                        index_elements=[cleaned_data.index.name],
+                        index_elements=index_elements,
                         set_=row
                     )
                 else:
@@ -305,10 +317,18 @@ def _upsert(table: sqa.Table,
                 con.execute(insert)
 
             except sqa.exc.IntegrityError:
-                upsert = table.update() \
-                    .where(table.c[cleaned_data.index.name] == index) \
-                    .values(row)
-                con.execute(upsert)
+                if multi:
+                    upsert = table.update()
+                    for n in names:
+                        upsert = upsert.where(table.c[n] == row[n])
+                        # row.pop(n)
+                    con.execute(upsert.values(row))
+                else:
+                    upsert = table.update() \
+                        .where(table.c[names] == row[names]) \
+                        .values(row)
+                    # row.pop(names)
+                    con.execute(upsert)
 
 
 def read_sql(table_name: str,
