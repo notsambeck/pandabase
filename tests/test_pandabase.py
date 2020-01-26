@@ -812,3 +812,15 @@ def test_upsert_auto_index_fails(empty_db, minimal_df):
                   con=empty_db,
                   auto_index=True,
                   how='upsert')
+
+
+@pytest.mark.parametrize('n_rows, n_cols', [
+    (100, 10),
+    (100, 100),
+])
+def test_upsert_numeric_column_names(empty_db, n_rows, n_cols):
+    """if column names are purely numeric, upsert fails."""
+    df = pd.DataFrame(index=range(n_rows), columns=[str(n) for n in range(n_cols)],
+                      data=np.random.random((n_rows, n_cols)))
+    df.index.name = 'dex'
+    pb.to_sql(df, con=empty_db, table_name='table', how='upsert')

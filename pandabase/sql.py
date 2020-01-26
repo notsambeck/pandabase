@@ -20,7 +20,7 @@ https://github.com/pandas-dev/pandas
 and dataset:
 https://github.com/pudo/dataset/
 """
-from .helpers import *
+from pandabase.helpers import *
 
 import pandas as pd
 from pandas.api.types import is_string_dtype
@@ -576,3 +576,13 @@ def describe_database(con, schema=None):
             print(f'failed to describe table: {table_name} due to {e}')
 
     return res
+
+
+if __name__ == '__main__':
+    import cProfile
+    db = 'sqlite:///:memory:'
+    n_rows = 10000
+    n_cols = 100
+    df = pd.DataFrame(index=range(n_rows), columns=['c' + str(n) for n in range(n_cols)], data=np.random.random((n_rows, n_cols)))
+    df.index.name = 'dex'
+    to_sql(df, con=db, table_name='table', how='upsert')
