@@ -65,7 +65,7 @@ def to_sql(df: pd.DataFrame, *,
                 Create table if does not exist.
             - upsert:
                 create table if needed
-                if record exists: update
+                if record exists: update (possibly replacing values with NULL)
                 else: insert
         schema: Specify the schema (if database flavor supports this, i.e. postgresql). If None, use default schema.
     
@@ -294,7 +294,10 @@ def _upsert(table: sqa.Table,
             engine: sqa.engine,
             cleaned_data: pd.DataFrame):
     """
-    insert data into a table, replacing any duplicate indices
+    insert data into a table, replacing any rows with duplicate indices
+
+    When upsert finds duplicate records, it overwrites ALL VALUES that are present in source DataFrame, including NaN.
+
     postgres - see: https://docs.sqlalchemy.org/en/13/dialects/postgresql.html#insert-on-conflict-upsert
     """
     if isinstance(cleaned_data.index, pd.MultiIndex):
