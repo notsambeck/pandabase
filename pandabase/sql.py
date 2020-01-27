@@ -99,17 +99,25 @@ def to_sql(df: pd.DataFrame, *,
                 raise ValueError(f'Index {df.index.name} is not UTC. Please correct.')
 
         if isinstance(df.index, pd.MultiIndex):
-            for val in df.index.names:
-                if val is None:
+            alterations = {}
+            for i, name in enumerate(df.index.names):
+                if name is None:
                     raise NameError(f'One or more values in MultiIndex is unnamed: {df.index.names}')
+                if clean_name(name) != name:
+                    alterations[i] = name
+            if alterations:
+                new_names = list(df.index.names)
+                for k, v in alterations.items():
+                    new_names[k] = v
+                df.index.names = new_names
 
         else:
             if df.index.name is None:
-                raise NameError('Autoindex is turned off, but df.index.name is None. Set df.index.name')
+                raise NameError('Autoindex is False, but df.index.name is None. Set df.index.name = something')
             if df.index.hasnans:
                 raise ValueError('DataFrame.index has NaN values and cannot be used as PK.')
+            df.index.name = clean_name(df.index.name)
 
-        df.index.name = clean_name(df.index.name)
     else:
         if isinstance(df.index, pd.MultiIndex):
             raise ValueError(f'pandabase does not allow autoindex=True on a DataFrame with MultiIndex. '

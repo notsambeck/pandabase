@@ -173,7 +173,7 @@ def get_column_dtype(column, pd_or_sqla, index=False):
 def has_table(con, table_name, schema=None):
     """returns True if a table exactly named table_name exists in con"""
     engine = engine_builder(con)
-    
+
     if schema is not None:
         return engine.run_callable(engine.dialect.has_table, table_name, schema=schema)
     else:
@@ -198,6 +198,8 @@ def make_clean_columns_dict(df: pd.DataFrame, autoindex=False):
         if multi-index:
             fail; must reset_index first
         include an additional new Integer column named PANDABASE_DEFAULT_INDEX and discard df.index
+    else:
+        df.index.name (or .names for MultiIndex) must all be legal names (i.e. results of clean_name)
 
     Example:
         >>> import pandas as pd
@@ -230,17 +232,15 @@ def make_clean_columns_dict(df: pd.DataFrame, autoindex=False):
     elif isinstance(df.index, pd.MultiIndex):
         indices = df[[]].reset_index(drop=False)
         for col_name in indices.columns:
-            index_name = clean_name(col_name)
             if col_name in df.columns:
                 raise NameError(f'MultiIndex name is duplicate of column name: {col_name}')
-            columns[index_name] = {'dtype': get_column_dtype(indices[col_name], 'sqla', index=True),
-                                   'pk': True}
+            columns[col_name] = {'dtype': get_column_dtype(indices[col_name], 'sqla', index=True),
+                                 'pk': True}
     else:
-        index_name = clean_name(df.index.name)
         if df.index.name in df.columns:
             raise NameError(f'index name is duplicate of column name: {df.index.name}')
-        columns[index_name] = {'dtype': get_column_dtype(df.index, 'sqla', index=True),
-                               'pk': True}
+        columns[df.index.name] = {'dtype': get_column_dtype(df.index, 'sqla', index=True),
+                                  'pk': True}
 
     # get column info
     for col_name in df.columns:
