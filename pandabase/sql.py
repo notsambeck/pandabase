@@ -325,13 +325,11 @@ def _upsert(table: sqa.Table,
                     upsert = table.update()
                     for n in names:
                         upsert = upsert.where(table.c[n] == row[n])
-                        # row.pop(n)
                     con.execute(upsert.values(row))
                 else:
                     upsert = table.update() \
                         .where(table.c[names] == row[names]) \
                         .values(row)
-                    # row.pop(names)
                     con.execute(upsert)
 
 
@@ -583,6 +581,8 @@ if __name__ == '__main__':
     db = 'sqlite:///:memory:'
     n_rows = 10000
     n_cols = 100
-    df = pd.DataFrame(index=range(n_rows), columns=['c' + str(n) for n in range(n_cols)], data=np.random.random((n_rows, n_cols)))
+    df = pd.DataFrame(index=range(n_rows), columns=['c' + str(n) for n in range(n_cols)],
+                      data=np.random.random((n_rows, n_cols)))
     df.index.name = 'dex'
-    to_sql(df, con=db, table_name='table', how='upsert')
+    # to_sql(df, con=db, table_name='table', how='upsert')
+    to_sql(df, con=db, table_name='table', how='append')

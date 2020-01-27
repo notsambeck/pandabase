@@ -181,11 +181,13 @@ def has_table(con, table_name, schema=None):
 
 
 def clean_name(name):
-    """returns a standardized version of column names: lower case without spaces or special characters"""
+    """returns a standardized version of name: lower case without spaces or special characters. May not be numeric"""
     d = {char: '_' for char in ' ()+-/*";=&|#><^%{}'}
     d['.'] = None
     d[','] = None
     table = str.maketrans(d)
+    if name.isnumeric():
+        raise NameError(f'Pandabase does not allow purely numeric names. Illegal name: {name}')
     return str(name).lower().strip().translate(table)
 
 
