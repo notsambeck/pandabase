@@ -1,5 +1,6 @@
 import pytest
 import pandas as pd
+import numpy as np
 from pandabase.companda import companda
 import pytz
 TZ = pytz.timezone('America/Los_Angeles')
@@ -94,7 +95,7 @@ def test_same_companda_alter_dtype(minimal_df):
     df2 = minimal_df.copy()
     # print(type(minimal_df.boolean[0]))
     # print(type(df2.boolean[0]))
-    df2.boolean = df2.boolean.astype(pd.np.int)
+    df2.boolean = df2.boolean.astype(np.int)
     # print(type(minimal_df.boolean[0]))
     # print(type(df2.boolean[0]))
     print(minimal_df.dtypes)
@@ -128,7 +129,7 @@ def test_same_companda_epsilon4(simple_df):
 
 def test_same_companda_nan(simple_df):
     df = simple_df.copy()
-    df.iloc[2, 2] = pd.np.NaN
+    df.iloc[2, 2] = np.NaN
     assert not companda(df, simple_df)
 
 

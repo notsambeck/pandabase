@@ -10,6 +10,7 @@ postgres: not automatic; execute these with pytest --run-postgres. postgresql re
 """
 
 import pandas as pd
+import numpy as np
 import pytest
 import sqlalchemy as sa
 
@@ -158,7 +159,7 @@ def simple_df():
     # df.integer = df.integer.astype(pd.Int64Dtype())   # nullable int is converted to Object as an index
 
     df.float = [float(i) / 10 for i in range(rows)]
-    df.float = df.float.astype(pd.np.float)
+    df.float = df.float.astype(np.float)
 
     df.string = list('panda_base')[:rows]
     df.boolean = [True, False] * (rows//2)
@@ -180,7 +181,7 @@ def df_with_all_nan_col():
     df.float = [float(i) / 10 for i in range(rows)]
     df.string = list('panda_base')[:rows]
     df.boolean = [True, False] * (rows//2)
-    df.nan = [pd.np.NaN] * rows
+    df.nan = [np.NaN] * rows
 
     assert df.date[0].tzinfo == UTC
     return df
@@ -220,7 +221,7 @@ def multi_index_df():
     df.integer = range(777, rows+777)
 
     df.float = [float(i) / 10 for i in range(rows)]
-    df.float = df.float.astype(pd.np.float)
+    df.float = df.float.astype(np.float)
 
     df.string = list('panda_base')[:rows]
     df.boolean = [True, False] * (rows//2)

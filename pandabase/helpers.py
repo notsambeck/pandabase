@@ -108,6 +108,8 @@ def _get_type_from_df_col(col: pd.Series, index: bool):
         if index:
             return Integer
         for val in col.unique():
+            if pd.isna(val):
+                continue
             if val != 0:
                 return Integer
         return Float

@@ -6,6 +6,8 @@ from pandas.api.types import (
     is_float_dtype,
     is_datetime64_any_dtype,
 )
+import numpy as np
+
 from .helpers import get_column_dtype
 
 
@@ -113,11 +115,11 @@ def companda(df1: pd.DataFrame,
 
         # CHECK FOR DIFFERENT DATATYPES EXPLICITLY
         if is_float_dtype(df1[col]) or is_integer_dtype(df1[col]):
-            if pd.np.array_equal(df1[col].isna(), df2[col].isna()):
-                if pd.np.array_equal(df1[col].dropna(), df2[col].dropna()):
+            if np.array_equal(df1[col].isna(), df2[col].isna()):
+                if np.array_equal(df1[col].dropna(), df2[col].dropna()):
                     continue
                 else:
-                    diff = pd.Series(pd.np.subtract(df1.dropna()[col].values,
+                    diff = pd.Series(np.subtract(df1.dropna()[col].values,
                                                     df2.dropna()[col].values) > epsilon, df1[col])
             else:
                 print(df1)
@@ -133,8 +135,8 @@ def companda(df1: pd.DataFrame,
             if df1[col].dt.tz != df2[col].dt.tz:
                 return Companda(False, True,
                                 f"unequal timezones: {df1[col].dt.tz}, {df2[col].dt.tz}")
-            if pd.np.array_equal(df1[col].isna(),
-                                 df2[col].isna()) and pd.np.array_equal(df1[col].dropna().values,
+            if np.array_equal(df1[col].isna(),
+                                 df2[col].isna()) and np.array_equal(df1[col].dropna().values,
                                                                         df2[col].dropna().values):
                 continue
             else:
@@ -143,8 +145,8 @@ def companda(df1: pd.DataFrame,
                 return Companda(False, True,
                                 f"columns and indices equal; datetime values different in {col}.")
         else:
-            if pd.np.array_equal(df1[col].isna(),
-                                 df2[col].isna()) and pd.np.array_equal(df1[col].dropna(),
+            if np.array_equal(df1[col].isna(),
+                                 df2[col].isna()) and np.array_equal(df1[col].dropna(),
                                                                         df2[col].dropna()):
                 continue
             else:

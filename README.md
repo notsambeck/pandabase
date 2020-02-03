@@ -9,7 +9,7 @@ By default, uses DataFrame.index as the primary key. By using an explicit primar
 
 Designed for especially for time-series datasets that need to be updated over time and stored to disk, but are used primarily in-memory for computation. All supported types can be a value or Null, nice for ML applications.
 
-Tested under Python>=3.6, with new versions of Pandas (>= 0.24) SQLAlchemy (>= 1.3). Works with SQLite and (new in 0.3) postgres - requires psycopg2 and postgres>=8.
+Tested under Python>=3.6, with new versions of Pandas (>= 0.24, including 1.0) SQLAlchemy (>= 1.3). Works with SQLite and (new in 0.3) postgres - requires psycopg2 and postgres>=8.
 
 ### Features
 * pandabase.to_sql replaces df.to_sql
@@ -68,10 +68,11 @@ For latest version:
 ```python
 # Python >= 3.6
 >>> import pandas as pd
+>>> import numpy as np
 >>> import pandabase
 >>> my_data = pd.DataFrame(index=range(7, 12), 
                            columns=['some_number'],
-                           data=pd.np.random.random((5,1)))
+                           data=np.random.random((5,1)))
 >>> my_data.index.name = 'my_index_name'        # index must be named to use as PK
 >>> pandabase.to_sql(my_data, table_name='my_table', con='sqlite:///new_sqlite_db.sqlite', how='create_only')
 Table('my_table', ...

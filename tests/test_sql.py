@@ -14,6 +14,8 @@ import pandabase as pb
 from pandabase.helpers import *
 from pandabase.companda import companda
 
+import numpy as np
+from datetime import datetime
 import pytz
 
 UTC = pytz.utc
@@ -198,14 +200,14 @@ def test_select_some_multi_index(empty_db, multi_index_df, lowest, length):
                                       ('upsert', 1000)])
 def test_write_time(empty_db, how, qty):
     """test that write times are semi-acceptably fast"""
-    start = pd.datetime.utcnow()
-    pb.to_sql(pd.DataFrame(index=range(qty), columns=['a', 'b', 'c'], data=pd.np.random.random((qty, 3))),
+    start = datetime.utcnow()
+    pb.to_sql(pd.DataFrame(index=range(qty), columns=['a', 'b', 'c'], data=np.random.random((qty, 3))),
               table_name='sample',
               con=empty_db,
               how=how,
               auto_index=True,
               )
-    end = pd.datetime.utcnow()
+    end = datetime.utcnow()
     assert end - start < pd.Timedelta(seconds=2)
 
 
@@ -709,7 +711,7 @@ def test_auto_index_add_valid_bool(minimal_df, empty_db, constants):
     x = len(df)
     assert df.loc[x - 2, 'boolean']
     assert not df.loc[x - 1, 'boolean']
-    assert pd.np.isnan(df.loc[x, 'boolean'])
+    assert pd.isna(df.loc[x, 'boolean'])
     with pytest.raises(KeyError):
         _ = df.loc[x + 1, 'boolean']
 
@@ -735,7 +737,7 @@ def test_upsert_valid_bool(pandabase_loaded_db, how, constants):
     assert is_bool_dtype(df.boolean) or is_integer_dtype(df.boolean)
     assert df.loc[101, 'boolean']
     assert not df.loc[102, 'boolean']
-    assert pd.np.isnan(df.loc[103, 'boolean'])
+    assert pd.isna(df.loc[103, 'boolean'])
     with pytest.raises(KeyError):
         _ = df.loc[104, 'boolean']
 

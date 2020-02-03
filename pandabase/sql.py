@@ -23,6 +23,7 @@ https://github.com/pudo/dataset/
 from pandabase.helpers import *
 
 import pandas as pd
+import numpy as np
 from pandas.api.types import is_string_dtype
 
 import sqlalchemy as sqa
