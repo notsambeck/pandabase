@@ -270,25 +270,29 @@ def to_sql(df: pd.DataFrame, *,
     return table
 
 
+def _df_to_rows(cleaned_data: pd.DataFrame, auto_index: bool):
+    rows = []
+
+    # remove completely null columns; convert to object due to bug inserting Int64
+    df = cleaned_data.dropna(axis=1, how='all').astype('object')
+
+    if not auto_index:
+        for row in df.reset_index(drop=False).itertuples(index=False):
+            rows.append(row._asdict())
+    else:
+        for row in df.reset_index(drop=True).itertuples(index=False):
+            rows.append(row._asdict())
+    return rows
+
+
 def _insert(table: sqa.Table,
             engine: sqa.engine,
             cleaned_data: pd.DataFrame,
             auto_index: bool):
 
     with engine.begin() as con:
-        rows = []
-        
-        # remove completely null columns; convert to object due to bug inserting Int64
-        df = cleaned_data.dropna(axis=1, how='all').astype('object')
-
-        if not auto_index:
-            for row in df.reset_index(drop=False).itertuples(index=False):
-                rows.append(row._asdict())
-            con.execute(table.insert(), rows)
-        else:
-            for row in df.reset_index(drop=True).itertuples(index=False):
-                rows.append(row._asdict())
-            con.execute(table.insert(), rows)
+        rows = _df_to_rows(cleaned_data, auto_index)
+        con.execute(table.insert(), rows)
 
 
 def _upsert(table: sqa.Table,
@@ -310,6 +314,9 @@ def _upsert(table: sqa.Table,
         names = cleaned_data.index.name
         index_elements = [names]
 
+    update_cols = [c.name for c in table.c
+                   if c not in list(table.primary_key.columns)
+                   and c.name in cleaned_data.columns]
     cleaned_data = cleaned_data.astype('object')
 
     def map2none(val):
@@ -317,18 +324,21 @@ def _upsert(table: sqa.Table,
             return val
 
     with engine.begin() as con:
+        if engine.dialect.dbapi.__name__ == 'psycopg2':
+            rows = _df_to_rows(cleaned_data, auto_index=False)
+            insert = pg_insert(table).values(rows)
+            upsert = insert.on_conflict_do_update(
+                index_elements=index_elements,
+                set_={k: map2none(getattr(insert.excluded, k)) for k in update_cols}
+            )
+            con.execute(upsert)
+            return
+
         for row in cleaned_data.reset_index(drop=False).itertuples(index=False):
             # check index uniqueness by attempting insert; if it fails, update
             row = {k: map2none(v) for k, v in row._asdict().items()}
             try:
-
-                if engine.dialect.dbapi.__name__ == 'psycopg2':
-                    insert = pg_insert(table).values(row).on_conflict_do_update(
-                        index_elements=index_elements,
-                        set_=row
-                    )
-                else:
-                    insert = table.insert().values(row)
+                insert = table.insert().values(row)
 
                 con.execute(insert)
 
