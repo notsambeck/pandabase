@@ -37,24 +37,31 @@ def test_same_companda_multi_copy(multi_index_df):
 def test_same_companda_cols1(minimal_df):
     df = minimal_df.copy()
     df = df.drop(['float'], axis=1)
+    print(companda(df, minimal_df))
     assert not companda(df, minimal_df)
 
 
 def test_same_companda_cols2(minimal_df):
     df = minimal_df.copy()
     df = df.drop(['float'], axis=1)
+    print()
+    print(companda(df, minimal_df))
     assert not companda(minimal_df, df)
 
 
 def test_same_companda_cols3(minimal_df):
     df = minimal_df.copy()
     df = df.rename(columns={'integer': 'x'})
+    print()
+    print(companda(df, minimal_df))
     assert not companda(df, minimal_df)
 
 
 def test_same_companda_cols4(minimal_df):
     df = minimal_df.copy()
     df = df.rename(columns={'integer': 'x'})
+    print()
+    print(companda(df, minimal_df))
     assert not companda(minimal_df, df)
 
 
@@ -112,18 +119,24 @@ def test_same_companda_epsilon1(simple_df):
 def test_same_companda_epsilon2(simple_df):
     df = simple_df.copy()
     df.float = df.float.apply(lambda x: x + .01)
+    print()
+    print(companda(df, simple_df))
     assert not companda(df, simple_df)
 
 
 def test_same_companda_epsilon3(simple_df):
     df = simple_df.copy()
     df.integer = df.integer.apply(lambda x: x + .01)
+    print()
+    print(companda(df, simple_df))
     assert not companda(df, simple_df)
 
 
 def test_same_companda_epsilon4(simple_df):
     df = simple_df.copy()
     df.integer = df.integer.apply(lambda x: x + 1)
+    print()
+    print(companda(df, simple_df))
     assert not companda(df, simple_df)
 
 

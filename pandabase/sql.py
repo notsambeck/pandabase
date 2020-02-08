@@ -313,6 +313,7 @@ def _upsert(table: sqa.Table,
     cleaned_data = cleaned_data.astype('object')
 
     def map2none(val):
+        """sqlalchemy freaks out about NaNs, so replace them with None"""
         if pd.notna(val):
             return val
 
