@@ -9,6 +9,6 @@ install:
   - pip install python-coveralls
   - pip install .
 script:
-  - pytest
+  - pytest --cov pandabase
 after_success:
   - coveralls
