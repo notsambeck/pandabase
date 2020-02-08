@@ -140,6 +140,15 @@ def test_create_table_multi_index(empty_db, multi_index_df, how):
     assert companda(multi_index_df, loaded)
 
 
+def test_create_table_multi_index_rename(empty_db, multi_index_df):
+    multi_index_df.index.names = ['name/z', 'other name']
+    table = pb.to_sql(multi_index_df,
+                      table_name='sample_mi',
+                      con=empty_db,
+                      how='create_only',
+                      )
+
+
 def test_select_all_multi_index(empty_db, multi_index_df):
     """add a new minimal table & read it back with pandabase - select all"""
     table = pb.to_sql(multi_index_df,
@@ -247,6 +256,17 @@ def test_create_select_table_range_int_index(empty_db, simple_df, constants):
     assert pb.companda(loaded, simple_df, ignore_all_nan_columns=True)
 
 
+def test_create_table_fails_non_utc_index(empty_db, simple_df, constants):
+    """add a new table with explicit index, read it back with pandabase, check equality"""
+    simple_df.index = pd.date_range('2011', freq='d', periods=len(simple_df), tz=LA_TZ)
+
+    with pytest.raises(ValueError):
+        pb.to_sql(simple_df,
+                  table_name='sample',
+                  con=empty_db,
+                  how='create_only')
+
+
 def test_create_select_table_range_datetime_index(empty_db, simple_df, constants):
     """add a new table with explicit index, read it back with pandabase, check equality"""
     simple_df.index = simple_df.date
@@ -270,6 +290,14 @@ def test_create_select_table_range_datetime_index(empty_db, simple_df, constants
     loaded = pb.read_sql('sample', con=empty_db,
                          lowest=simple_df.index[0],
                          highest=simple_df.index[-1])
+    assert pb.companda(loaded, simple_df, ignore_all_nan_columns=True)
+
+    loaded = pb.read_sql('sample', con=empty_db,
+                         highest=simple_df.index[-1])
+    assert pb.companda(loaded, simple_df, ignore_all_nan_columns=True)
+
+    loaded = pb.read_sql('sample', con=empty_db,
+                         lowest=simple_df.index[0])
     assert pb.companda(loaded, simple_df, ignore_all_nan_columns=True)
 
 
@@ -828,3 +856,8 @@ def test_upsert_numeric_column_names(empty_db, n_rows, n_cols, prefix, how):
     df.index.name = 'dex'
     with pytest.raises(NameError):
         pb.to_sql(df, con=empty_db, table_name='table', how=how)
+
+
+def test_profiling_script():
+    """test that profiling script runs"""
+    pb.profiling_script(1000)

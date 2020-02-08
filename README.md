@@ -16,7 +16,7 @@ Tested under Python>=3.6, with new versions of Pandas (>= 0.24, including 1.0) S
 * pandabase.to_sql replaces df.to_sql
 * pandabase.read_sql replaces pd.read_sql
 * primary key support:
-    * by default, uses df.index (with name != None) as table PK
+    * by default, uses df.index as table PK (must have name != None)
     * filter results with lowest/highest: lowest <= results.pk <= highest 
     * (new in 0.4): basic support for multi-indexes
     * optionally, can generate new integer index (with parameter auto_index=True)
@@ -32,8 +32,8 @@ Tested under Python>=3.6, with new versions of Pandas (>= 0.24, including 1.0) S
 * moderately smart insertion handles new records that 'almost correspond' with database schema automatically
 * tested under SQLite and PostgresQL
 * supports arbitrary schemas in Postgres with the schema='name' keyword argument
-* 91% test coverage (pytest)
-* companda tool for rich comparisons of DataFrames
+* test suite (pytest)
+* companda(df1, df2): compare DataFrames nicely
 
 ### Design Considerations
 * Minimal dependencies: Pandas (>= 0.24) & SQLAlchemy (>= 1.3) are the only requirements

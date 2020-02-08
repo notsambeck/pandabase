@@ -70,6 +70,12 @@ def test_clean_name(name, cleaned):
     assert clean_name(name) == cleaned
 
 
+@pytest.mark.parametrize('name', ['a@b', '6', '@6b'])
+def test_illegal_name(name):
+    with pytest.raises(NameError):
+        clean_name(name)
+
+
 def test_make_clean_columns_dict_single_index():
     """test make_clean_columns_dict works for a single index"""
     data = {'full_name': ['John Doe'],

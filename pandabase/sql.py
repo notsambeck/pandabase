@@ -105,7 +105,7 @@ def to_sql(df: pd.DataFrame, *,
                 if name is None:
                     raise NameError(f'One or more values in MultiIndex is unnamed: {df.index.names}')
                 if clean_name(name) != name:
-                    alterations[i] = name
+                    alterations[i] = clean_name(name)
             if alterations:
                 new_names = list(df.index.names)
                 for k, v in alterations.items():
@@ -512,13 +512,14 @@ def _add_columns_to_db(new_col, table_name, con, schema=None):
                      f'ADD COLUMN {name} {new_col.type.compile(engine.dialect)}')
 
 
-if __name__ == '__main__':
-    """profiling script"""
+def profiling_script(n_rows):
     db = 'sqlite:///:memory:'
-    n_rows = 10000
     n_cols = 100
-    _df = pd.DataFrame(index=range(n_rows), columns=['c' + str(n) for n in range(n_cols)],
+    _df = pd.DataFrame(index=range(n_rows), columns=['col_' + str(n) for n in range(n_cols)],
                        data=np.random.random((n_rows, n_cols)))
     _df.index.name = 'dex'
-    # to_sql(df, con=db, table_name='table', how='upsert')
     to_sql(_df, con=db, table_name='table', how='append')
+
+
+if __name__ == '__main__':
+    profiling_script(10000)
