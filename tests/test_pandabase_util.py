@@ -12,7 +12,6 @@ import pytest
 
 import pandabase as pb
 from pandabase.helpers import *
-from pandabase.companda import companda
 
 import pytz
 
@@ -81,7 +80,7 @@ def test_add_column_to_database(pandabase_loaded_db, actually_do, constants):
     name = 'a_new_column'
     col = sqa.Column(name, primary_key=False, type_=Integer, nullable=True)
     if actually_do:
-        pb.add_columns_to_db(col, table_name=constants.TABLE_NAME, con=pandabase_loaded_db)
+        pb.sql._add_columns_to_db(col, table_name=constants.TABLE_NAME, con=pandabase_loaded_db)
     df = pb.read_sql(table_name=constants.TABLE_NAME, con=pandabase_loaded_db)
 
     if actually_do:
@@ -92,27 +91,27 @@ def test_add_column_to_database(pandabase_loaded_db, actually_do, constants):
 
 
 def test_drop_table(pandabase_loaded_db):
-    names = pb.get_db_table_names(pandabase_loaded_db)
+    names = pb.util.get_db_table_names(pandabase_loaded_db)
     for name in names:
         assert pb.has_table(pandabase_loaded_db, table_name=name)
-        pb.drop_db_table(con=pandabase_loaded_db, table_name=name)
+        pb.util.drop_db_table(con=pandabase_loaded_db, table_name=name)
         assert not pb.has_table(pandabase_loaded_db, table_name=name)
 
 
 def test_get_tables(pandabase_loaded_db, constants):
-    names = pb.get_db_table_names(pandabase_loaded_db)
+    names = pb.util.get_db_table_names(pandabase_loaded_db)
     assert len(names) == 1
     assert names[0] == constants.TABLE_NAME
 
 
 def test_get_columns(pandabase_loaded_db, simple_df, constants):
-    cols = pb.get_table_column_names(pandabase_loaded_db, constants.TABLE_NAME)
+    cols = pb.util.get_table_column_names(pandabase_loaded_db, constants.TABLE_NAME)
     assert len(cols) == len(simple_df.columns) + 1
     assert constants.SAMPLE_INDEX_NAME in [col.name for col in cols]
 
 
 def test_describe_db(pandabase_loaded_db, constants):
-    desc = pb.describe_database(pandabase_loaded_db)
+    desc = pb.util.describe_database(pandabase_loaded_db)
     assert len(desc) == 1  # 1 table in sample db
     assert desc[constants.TABLE_NAME]['min'] == 0  # min
     assert desc[constants.TABLE_NAME]['max'] == 5  # max

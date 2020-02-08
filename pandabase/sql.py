@@ -183,7 +183,8 @@ def to_sql(df: pd.DataFrame, *,
                     continue   # skip empty columns that do not exist in db
                 elif add_new_columns:
                     logger.info(f'adding new column to {con}:{table_name}: {col_name}')
-                    add_columns_to_db(make_column(col_name, df_col_info), table_name=table_name, con=con, schema=schema)
+                    _add_columns_to_db(make_column(col_name, df_col_info),
+                                       table_name=table_name, con=con, schema=schema)
                     meta.clear()
                     table = Table(table_name, 
                                   meta, 
@@ -496,7 +497,7 @@ def read_sql(table_name: str,
     return df
 
 
-def add_columns_to_db(new_col, table_name, con, schema=None):
+def _add_columns_to_db(new_col, table_name, con, schema=None):
     """Make new columns as needed with ALTER TABLE, as a weak substitute for migrations"""
     engine = engine_builder(con)
     name = clean_name(new_col.name)
@@ -511,91 +512,13 @@ def add_columns_to_db(new_col, table_name, con, schema=None):
                      f'ADD COLUMN {name} {new_col.type.compile(engine.dialect)}')
 
 
-def drop_db_table(table_name, con, schema=None):
-    """Drop table [table_name] from con (or con.schema, if schema kwarg is supplied)
-    utility function to avoid calling SQL/SQLA directly during maintenance, etc."""
-    engine = engine_builder(con)
-    meta = sqa.MetaData(engine)
-    meta.reflect(bind=engine, schema=schema)
-
-    if schema is None:
-        table_namespace = table_name
-    else:
-        table_namespace = f'{schema}.{table_name}'
-    
-    t = meta.tables[table_namespace]
-
-    with engine.begin():
-        t.drop()
-
-
-def get_db_table_names(con, schema=None):
-    """get a list of table names from con (or con.schema, if schema kwarg is supplied)"""
-    meta = sqa.MetaData()
-    engine = engine_builder(con)
-    meta.reflect(bind=engine, schema=schema)
-    return list(meta.tables.keys())
-
-
-def get_table_column_names(con, table_name, schema=None):
-    """get a list of column names from con, table_name (or con.schema if schema kwarg is supplied)"""
-    meta = sqa.MetaData()
-    engine = engine_builder(con)
-    meta.reflect(bind=engine, schema=schema)
-    
-    if schema is None:
-        table_namespace = table_name
-    else:
-        table_namespace = f'{schema}.{table_name}'
-
-    return list(meta.tables[table_namespace].columns)
-
-
-def describe_database(con, schema=None):
-    """
-    Returns a description of con (or con.schema if schema kwarg is supplied): {table_names: {table_info_dicts}}
-
-    Args:
-        con: string URI or db engine
-        schema: Specify the schema (if database flavor supports this). If None, use default schema.
-
-    Returns:
-        {'table_name_1': {'min': min, 'max': max, 'count': count},
-         ... }
-    """
-    engine = engine_builder(con)
-    meta = sqa.MetaData()
-    meta.reflect(bind=engine, schema=schema)
-
-    res = {}
-
-    for table_name in meta.tables:
-        try:
-            table = Table(table_name, meta, autoload=True, autoload_with=engine)
-            index = table.primary_key.columns
-            if len(index) == 1:
-                index = index.items()[0][0]
-                minim = engine.execute(sqa.select([sqa.func.min(sqa.text(index))]).select_from(table)).scalar()
-                maxim = engine.execute(sqa.select([sqa.func.max(sqa.text(index))]).select_from(table)).scalar()
-                count = engine.execute(sqa.select([sqa.func.count()]).select_from(table)).scalar()
-                res[table_name] = {'min': minim, 'max': maxim, 'count': count}
-            else:
-                count = engine.execute(sqa.select([sqa.func.count()]).select_from(table)).scalar()
-                res[table_name] = {'index_type': 'multi', 'index_cols': str(index.keys()), 'count': count}
-
-        except Exception as e:
-            print(f'failed to describe table: {table_name} due to {e}')
-
-    return res
-
-
 if __name__ == '__main__':
-    import cProfile
+    """profiling script"""
     db = 'sqlite:///:memory:'
     n_rows = 10000
     n_cols = 100
-    df = pd.DataFrame(index=range(n_rows), columns=['c' + str(n) for n in range(n_cols)],
-                      data=np.random.random((n_rows, n_cols)))
-    df.index.name = 'dex'
+    _df = pd.DataFrame(index=range(n_rows), columns=['c' + str(n) for n in range(n_cols)],
+                       data=np.random.random((n_rows, n_cols)))
+    _df.index.name = 'dex'
     # to_sql(df, con=db, table_name='table', how='upsert')
-    to_sql(df, con=db, table_name='table', how='append')
+    to_sql(_df, con=db, table_name='table', how='append')
