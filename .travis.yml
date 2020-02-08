@@ -6,6 +6,9 @@ python:
   - "3.8"
 install:
   - pip install -r requirements.txt
+  - pip install python-coveralls
   - pip install .
 script:
   - pytest
+after_success:
+  - coveralls
