@@ -4,36 +4,42 @@
 [![Build Status](https://travis-ci.org/notsambeck/pandabase.svg?branch=master)](https://travis-ci.org/notsambeck/pandabase)
 [![Coverage Status](https://coveralls.io/repos/github/notsambeck/pandabase/badge.svg?branch=master)](https://coveralls.io/github/notsambeck/pandabase?branch=master)
 
-pandabase links pandas DataFrames to SQL databases, supporting read, append, and upsert. 
+pandabase links pandas DataFrames to SQL databases, supporting read, append, upsert, and basic database management operations. 
 
 By default, uses DataFrame.index as the primary key. By using an explicit primary key, pandabase makes rational database schemas the obvious choice, and makes it easy to maintain clean data even when it must be updated frequently. 
 
-Designed for especially for time-series datasets that need to be updated over time and stored to disk, but are used primarily in-memory for computation. All supported types can be a value or Null, nice for ML applications.
+Designed specifically for time-series datasets that need to be stored to disk permanently, but are updated over time and used primarily in-memory for computation. All supported types are nullable, great for flexible ML applications.
 
-Tested under Python>=3.6, with new versions of Pandas (>= 0.24, including 1.0) SQLAlchemy (>= 1.3). Works with SQLite and (new in 0.3) postgres - requires psycopg2 and postgres>=8.
+Tested under:
+* Python >= 3.6
+* Pandas >= 0.24, including 1.0
+* SQLAlchemy >= 1.3 
+* SQLite
+* Postgres
+    * requires psycopg2 and postgres >= 8
 
 ### Features
 * pandabase.to_sql replaces df.to_sql
 * pandabase.read_sql replaces pd.read_sql
 * primary key support:
     * by default, uses df.index as table PK (must have name != None)
-    * filter results with lowest/highest: lowest <= results.pk <= highest 
-    * (new in 0.4): basic support for multi-indexes
-    * optionally, can generate new integer index (with parameter auto_index=True)
+    * filter results with lowest/highest kwargs: lowest <= results.pk <= highest 
+    * (new in 0.4): support for multi-indexes
+    * optionally, generate integer index (with parameter auto_index=True)
 * multiple insert modes: how='create_only', 'upsert', or 'append'
 * datatypes (all nullable): 
     * boolean
     * int
     * float
     * datetime (UTC only)
-    * string (object)
+    * string
 
 ### Bonus Features
 * moderately smart insertion handles new records that 'almost correspond' with database schema automatically
-* tested under SQLite and PostgresQL
-* supports arbitrary schemas in Postgres with the schema='name' keyword argument
-* test suite (pytest)
-* companda(df1, df2): compare DataFrames nicely
+* to_sql can automatically add new columns to database as needed with kwarg: add_new_columns=True
+* supports arbitrary schemas in Postgres with kwarg: schema=name
+* comprehensive test suite (pytest)
+* companda(df1, df2) test tool: rich comparisons of DataFrames
 
 ### Design Considerations
 * Minimal dependencies: Pandas (>= 0.24) & SQLAlchemy (>= 1.3) are the only requirements
@@ -99,7 +105,7 @@ new_sqlite_db.sqlite
 11  0.406995
 ```
 
-Addtional keyword arguments for pandabase.read_sql:
+Additional keyword arguments for pandabase.read_sql:
 
 [lowest, highest]: minimum/maximum values for PK that will be retrieved. Can be used independently of each other.
 
@@ -114,26 +120,27 @@ Companda - rich comparisons of DataFrames. call companda on two DataFrames, get 
 >>> from pandabse.companda import companda
 >>> df = pandabase.read_sql('my_table', con='sqlite:///new_sqlite_db.sqlite'))
 >>> companda(df, df.copy())
-Companda(True, message='Equal DataFrames')
+Companda(True, message='DataFrames are equal')
 >>> bool(companda(df, df.copy()))
 True
 
 >>> df2 = df.copy
 >>> df2.iloc[1, 2] = -1000
 >>> companda(df, df2)
-Companda(False, message='Columns, indices are equal, but unqual values in columns [col_a]...')
+Companda(False, message='Columns and indices are equal, but unequal values in columns [col_a]...')
 >>> bool(companda(df, df2))
 False
 ```
 
-Table tools: pandabase.
-* add_columns_to_db(new_col, table_name, con):
-    * """Make new columns as needed with ALTER TABLE (pandabase.to_sql can do this automatically during insertion with kwarg: add_new_columns=True)"""
+### Table utility functions:
+
+Under basic use cases, Pandabase can handle database administration tasks. All support schema=name kwarg in Postgres.
+
 * drop_db_table(table_name, con):
-    * """Drop table [table_name] from con - be careful!"""
+    * Drop table [table_name] from con - be careful with this!
 * get_db_table_names(con):
-    * """get a list of table names from database"""
+    * Get a list of table names from database.
 * get_table_column_names(con, table_name):
-    * """get a list of column names from database, table"""
+    * Get a list of column names from database, table.
 * describe_database(con):
-    * """get a description of database content: table_name: {table_info_dict}"""
+    * Get a description of database content: {table_names: {table_info_dicts}}.

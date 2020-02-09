@@ -188,8 +188,9 @@ def clean_name(name):
     d['.'] = None
     d[','] = None
     table = str.maketrans(d)
-    if name.isnumeric():
-        raise NameError(f'Pandabase does not allow purely numeric names. Illegal name: {name}')
+    if name[0].isnumeric():
+        raise NameError(f'Pandabase does not allow purely numeric names or names that start with digits.'
+                        f' Illegal name: {name}')
     if '@' in name:
         raise NameError(f'At sign @ may not be a legal identifier. Please rename: {name}')
     return str(name).lower().strip().translate(table)

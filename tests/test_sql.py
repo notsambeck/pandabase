@@ -140,13 +140,27 @@ def test_create_table_multi_index(empty_db, multi_index_df, how):
     assert companda(multi_index_df, loaded)
 
 
-def test_create_table_multi_index_rename(empty_db, multi_index_df):
-    multi_index_df.index.names = ['name/z', 'other name']
-    table = pb.to_sql(multi_index_df,
+@pytest.mark.parametrize('how', ['create_only', 'upsert'])
+def test_create_table_multi_index(empty_db, multi_index_df_4, how):
+    """add a new minimal table & read it back with pandabase"""
+    table = pb.to_sql(multi_index_df_4,
                       table_name='sample_mi',
                       con=empty_db,
-                      how='create_only',
+                      how=how,
                       )
+
+    loaded = pb.read_sql(con=empty_db, table_name='sample_mi')
+
+    assert companda(multi_index_df_4, loaded)
+
+
+def test_create_table_multi_index_rename(empty_db, multi_index_df, multi_index_df_4):
+    multi_index_df.index.names = ['name/z', 'other name']
+    pb.to_sql(multi_index_df,
+              table_name='sample_mi',
+              con=empty_db,
+              how='create_only',
+              )
 
 
 def test_select_all_multi_index(empty_db, multi_index_df):

@@ -22,6 +22,7 @@ from logging import basicConfig, DEBUG
 from types import SimpleNamespace
 
 import pytz
+
 UTC = pytz.utc
 
 # pd.set_option('display.max_colwidth', 12)
@@ -139,7 +140,7 @@ def minimal_df():
     df.integer = range(rows)
     df.float = [float(i) / 10 for i in range(rows)]
     df.string = list('panda_base')[:rows]
-    df.boolean = [True, False] * (rows//2)
+    df.boolean = [True, False] * (rows // 2)
 
     assert df.date[0].tzinfo is not None
     return df
@@ -150,19 +151,19 @@ def simple_df():
     """make a basic DataFrame with multiple dtypes, integer index"""
     rows = 6
     df = pd.DataFrame(columns=['date', 'integer', 'float', 'string', 'boolean'],
-                      index=range(rows),)
+                      index=range(rows), )
     df.index.name = SAMPLE_INDEX_NAME
 
     df.date = pd.date_range(pd.to_datetime('2001-01-01 12:00am', utc=True), periods=rows, freq='d', tz=UTC)
 
-    df.integer = range(777, rows+777)
+    df.integer = range(777, rows + 777)
     # df.integer = df.integer.astype(pd.Int64Dtype())   # nullable int is converted to Object as an index
 
     df.float = [float(i) / 10 for i in range(rows)]
     df.float = df.float.astype(np.float)
 
     df.string = list('panda_base')[:rows]
-    df.boolean = [True, False] * (rows//2)
+    df.boolean = [True, False] * (rows // 2)
 
     assert df.date[0].tzinfo == UTC
     return df
@@ -173,14 +174,14 @@ def df_with_all_nan_col():
     """make a dumb DataFrame with multiple dtypes and integer index"""
     rows = 6
     df = pd.DataFrame(columns=['date', 'integer', 'float', 'string', 'boolean', 'nan'],
-                      index=range(rows),)
+                      index=range(rows), )
     df.index.name = SAMPLE_INDEX_NAME
 
     df.date = pd.date_range(pd.to_datetime('2001-01-01 12:00am', utc=True), periods=rows, freq='d', tz=UTC)
-    df.integer = range(1, rows+1)
+    df.integer = range(1, rows + 1)
     df.float = [float(i) / 10 for i in range(rows)]
     df.string = list('panda_base')[:rows]
-    df.boolean = [True, False] * (rows//2)
+    df.boolean = [True, False] * (rows // 2)
     df.nan = [np.NaN] * rows
 
     assert df.date[0].tzinfo == UTC
@@ -192,7 +193,7 @@ def simple_df_with_nans():
     """make a dumb DataFrame with multiple dtypes and integer index, index is valid but columns.hasnans"""
     rows = 10
     df = pd.DataFrame(columns=['date', 'integer', 'float', 'string', 'boolean', 'nan'],
-                      index=range(rows),)
+                      index=range(rows), )
     df.index.name = SAMPLE_INDEX_NAME
 
     df.date = pd.date_range(pd.to_datetime('2006-01-01 12:00am', utc=True), periods=10, freq='d')
@@ -211,20 +212,46 @@ def simple_df_with_nans():
 
 @pytest.fixture(scope='function')
 def multi_index_df():
-    """make a basic DataFrame with multiple dtypes, integer index"""
+    """make a basic DataFrame with multiple dtypes, multi index"""
     rows = 6
     mi = pd.MultiIndex.from_arrays([list(range(rows)), [i / 10 for i in range(rows)]], names=['this', 'that'])
     df = pd.DataFrame(columns=['date', 'integer', 'float', 'string', 'boolean'], index=mi)
 
     df.date = pd.date_range(pd.to_datetime('2001-01-01 12:00am', utc=True), periods=rows, freq='h', tz=UTC)
 
-    df.integer = range(777, rows+777)
+    df.integer = range(777, rows + 777)
 
     df.float = [float(i) / 10 for i in range(rows)]
     df.float = df.float.astype(np.float)
 
     df.string = list('panda_base')[:rows]
-    df.boolean = [True, False] * (rows//2)
+    df.boolean = [True, False] * (rows // 2)
 
     assert df.date.loc[(0, 0.0)].tzinfo == UTC
+    return df
+
+
+@pytest.fixture(scope='function')
+def multi_index_df_4():
+    """make a basic DataFrame with multiple dtypes, integer index"""
+    rows = 6
+    mi = pd.MultiIndex.from_arrays([
+        list(range(rows)),
+        list(range(10, rows+10)),
+        [i / 10 for i in range(rows)],
+        pd.date_range('2019', freq='m', periods=rows, tz=pytz.utc),
+    ],
+        names=['int_index_1', 'int_index_2', 'float_index', 'timestamp_index'])
+    df = pd.DataFrame(columns=['date', 'integer', 'float', 'string', 'boolean'], index=mi)
+
+    df.date = pd.date_range(pd.to_datetime('2001-01-01 12:00am', utc=True), periods=rows, freq='h', tz=UTC)
+
+    df.integer = range(777, rows + 777)
+
+    df.float = [float(i) / 10 for i in range(rows)]
+    df.float = df.float.astype(np.float)
+
+    df.string = list('panda_base')[:rows]
+    df.boolean = [True, False] * (rows // 2)
+
     return df
