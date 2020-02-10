@@ -78,7 +78,7 @@ def companda(df1: pd.DataFrame,
         if col not in cols1:
             missing_from_1.append(col)
     if missing_from_2 or missing_from_1:
-        msg = f'{missing_from_2} missing from df2 and {missing_from_1} missing from df1'
+        msg = f'Columns {missing_from_2} missing from df2 and {missing_from_1} missing from df1'
         return Companda(False, False, msg)
 
     if len(df1.columns) != len(df2.columns):
@@ -116,25 +116,25 @@ def companda(df1: pd.DataFrame,
                             f"columns and indices equal, but datatypes not equal in column {col}. \n"
                             f"types: {df1[col].dtype} / {df2[col].dtype}.")
 
-        # CHECK FOR DIFFERENT DATATYPES EXPLICITLY
+        # CHECK NUMERIC DATATYPES
         if is_float_dtype(df1[col]) or is_integer_dtype(df1[col]):
             if np.array_equal(df1[col].isna(), df2[col].isna()):
                 if np.array_equal(df1[col].dropna(), df2[col].dropna()):
                     continue
                 else:
-                    diff = np.subtract(df1.dropna()[col].values, df2.dropna()[col].values)
-                    columns_are_different = pd.Series(diff > epsilon, df1[col])
+                    diff = np.abs(np.subtract(df1.dropna()[col].values, df2.dropna()[col].values))
+                    columns_are_different = pd.Series(diff > epsilon, df1[col].dropna())
+                if columns_are_different.sum() == 0:
+                    continue
+                else:
+                    return Companda(False, True,
+                                    f"Columns and indices equal; values not almost equal in column: {col}.\n"
+                                    f"Maximum delta (absolute): {diff.max()}")
             else:
                 print(df1)
                 print(df2)
                 return Companda(False, True,
                                 f"Columns and indices equal; values have different NaN values in {col}.")
-            if columns_are_different.sum() == 0:
-                continue
-            else:
-                return Companda(False, True,
-                                f"Columns and indices equal; values not almost equal in column {col}.\n"
-                                f"Maximum delta: {diff.max()}")
         elif is_datetime64_any_dtype(df1[col]):
             if df1[col].dt.tz != df2[col].dt.tz:
                 return Companda(False, True,

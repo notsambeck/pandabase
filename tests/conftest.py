@@ -178,7 +178,7 @@ def df_with_all_nan_col():
     df.index.name = SAMPLE_INDEX_NAME
 
     df.date = pd.date_range(pd.to_datetime('2001-01-01 12:00am', utc=True), periods=rows, freq='d', tz=UTC)
-    df.integer = range(1, rows + 1)
+    df.integer = range(777, rows + 777)
     df.float = [float(i) / 10 for i in range(rows)]
     df.string = list('panda_base')[:rows]
     df.boolean = [True, False] * (rows // 2)

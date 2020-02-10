@@ -140,10 +140,28 @@ def test_same_companda_epsilon4(simple_df):
     assert not companda(df, simple_df)
 
 
-def test_same_companda_nan(simple_df):
+def test_companda_nan_different(simple_df):
     df = simple_df.copy()
     df.iloc[2, 2] = np.NaN
     assert not companda(df, simple_df)
+
+
+def test_companda_nan_different_values(simple_df):
+    df = simple_df.copy()
+    df.iloc[2, 2] = np.NaN
+
+    df2 = simple_df.copy()
+    df2.iloc[2, 2] = np.NaN
+    df2.iloc[1, 2] = 450
+    x = companda(df, df2)
+    print(x)
+    assert not x
+
+
+def test_companda_nan_same(simple_df):
+    df = simple_df.copy()
+    df.iloc[2, 2] = np.NaN
+    assert companda(df, df)
 
 
 def test_same_companda_string(simple_df):
