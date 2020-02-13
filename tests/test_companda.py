@@ -100,11 +100,7 @@ def test_different_companda(minimal_df, simple_df):
 def test_same_companda_alter_dtype(minimal_df):
     """changing between types changes equality (e.g. bool!=int)"""
     df2 = minimal_df.copy()
-    # print(type(minimal_df.boolean[0]))
-    # print(type(df2.boolean[0]))
     df2.boolean = df2.boolean.astype(np.int)
-    # print(type(minimal_df.boolean[0]))
-    # print(type(df2.boolean[0]))
     print(minimal_df.dtypes)
     print(df2.dtypes)
     assert not companda(df2, minimal_df, check_dtype=True)
@@ -148,11 +144,13 @@ def test_companda_nan_different(simple_df):
 
 def test_companda_nan_different_values(simple_df):
     df = simple_df.copy()
-    df.iloc[2, 2] = np.NaN
+    df.iloc[0, 0] = np.NaN
+    df.iloc[1, 1] = np.NaN
 
     df2 = simple_df.copy()
-    df2.iloc[2, 2] = np.NaN
-    df2.iloc[1, 2] = 450
+    df2.iloc[0, 0] = np.NaN
+    df2.iloc[1, 1] = np.NaN
+    df2.iloc[0, 1] = 450
     x = companda(df, df2)
     print(x)
     assert not x

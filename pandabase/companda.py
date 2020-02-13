@@ -122,8 +122,8 @@ def companda(df1: pd.DataFrame,
                 if np.array_equal(df1[col].dropna(), df2[col].dropna()):
                     continue
                 else:
-                    diff = np.abs(np.subtract(df1.dropna()[col].values, df2.dropna()[col].values))
-                    columns_are_different = pd.Series(diff > epsilon, df1[col].dropna())
+                    diff = np.abs(np.subtract(df1[col].dropna().values, df2[col].dropna().values))
+                    columns_are_different = diff > epsilon
                 if columns_are_different.sum() == 0:
                     continue
                 else:
