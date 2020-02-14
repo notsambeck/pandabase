@@ -143,11 +143,11 @@ def test_create_table_multi_index(empty_db, multi_index_df, how):
 @pytest.mark.parametrize('how', ['create_only', 'upsert'])
 def test_create_table_multi_index(empty_db, multi_index_df_4, how):
     """add a new minimal table & read it back with pandabase"""
-    table = pb.to_sql(multi_index_df_4,
-                      table_name='sample_mi',
-                      con=empty_db,
-                      how=how,
-                      )
+    pb.to_sql(multi_index_df_4,
+              table_name='sample_mi',
+              con=empty_db,
+              how=how,
+              )
 
     loaded = pb.read_sql(con=empty_db, table_name='sample_mi')
 
@@ -207,11 +207,11 @@ def test_select_fails_multi_index(empty_db, multi_index_df, lowest):
                                             ])
 def test_select_some_multi_index(empty_db, multi_index_df, lowest, length):
     """add a new minimal table & read it back with pandabase - select all"""
-    table = pb.to_sql(multi_index_df,
-                      table_name='sample_mi',
-                      con=empty_db,
-                      how='create_only',
-                      )
+    pb.to_sql(multi_index_df,
+              table_name='sample_mi',
+              con=empty_db,
+              how='create_only',
+              )
 
     loaded = pb.read_sql(con=empty_db, table_name='sample_mi', highest=(1000, 1000), lowest=lowest)
     print('\n', loaded)
@@ -320,10 +320,10 @@ def test_select_table_range_fails_different_index(empty_db, simple_df, constants
     simple_df.index = simple_df.date
     simple_df = simple_df.drop('date', axis=1)
 
-    table = pb.to_sql(simple_df,
-                      table_name='sample',
-                      con=empty_db,
-                      how='create_only')
+    pb.to_sql(simple_df,
+              table_name='sample',
+              con=empty_db,
+              how='create_only')
 
     with pytest.raises(Exception):
         _ = pb.read_sql('sample', con=empty_db,
@@ -875,3 +875,25 @@ def test_upsert_numeric_column_names(empty_db, n_rows, n_cols, prefix, how):
 def test_profiling_script():
     """test that profiling script runs"""
     pb.profiling_script(1000)
+
+
+def scale_df(n_rows, n_cols):
+    df = pd.DataFrame(index=range(n_rows), columns=['c' + str(n) for n in range(n_cols)],
+                      data=np.random.random((n_rows, n_cols)))
+    df.index.name = 'fake_index'
+    return df.copy()
+
+
+@pytest.mark.parametrize('rows, cols', [(10, 10),
+                                        (100, 253)])
+def test_scale(rows, cols, empty_db):
+    """test different scales. Pandabase fails at 200 cols"""
+    df = scale_df(rows, cols)
+
+    pb.to_sql(df, con=empty_db, table_name=f'scale_{rows}x{cols}', how='upsert')
+
+
+def test_scale_fails(empty_db):
+    with pytest.raises(ValueError):
+        df = scale_df(10, 255)
+        pb.to_sql(df, con=empty_db, table_name=f'scale_fail', how='upsert')

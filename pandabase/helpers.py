@@ -222,6 +222,8 @@ def make_clean_columns_dict(df: pd.DataFrame, autoindex=False):
          'dob': {'dtype': TIMESTAMP(timezone=True), 'pk': False}}
     
     """
+    if len(df.columns) > 253:
+        raise ValueError('pandabase is (currently) incompatible with data over 253 columns wide')
     columns = {}
     df.columns = [clean_name(col) for col in df.columns]
 
