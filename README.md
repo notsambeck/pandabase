@@ -119,13 +119,15 @@ Companda - rich comparisons of DataFrames. call companda on two DataFrames, get 
 ```python
 >>> from pandabse.companda import companda
 >>> df = pandabase.read_sql('my_table', con='sqlite:///new_sqlite_db.sqlite'))
+
 >>> companda(df, df.copy())
 Companda(True, message='DataFrames are equal')
 >>> bool(companda(df, df.copy()))
 True
 
->>> df2 = df.copy
+>>> df2 = df.copy()
 >>> df2.iloc[1, 2] = -1000
+
 >>> companda(df, df2)
 Companda(False, message='Columns and indices are equal, but unequal values in columns [col_a]...')
 >>> bool(companda(df, df2))
