@@ -42,13 +42,13 @@ def to_sql(df: pd.DataFrame, *,
            con: str or sqa.engine,
            auto_index=False,
            how='create_only',
-           add_new_columns=False, 
+           add_new_columns=False,
            schema: str = None):
     """
     Write records stored in DataFrame [df] to [table_name] in SQL database [con].
 
     Caveats:
-    Converts any datetime to UTC
+    Converts any naive datetime to UTC
     Requires a unique, named index as DataFrame.index; to insert into existing database, this name must be consistent
 
     Args:
@@ -69,7 +69,7 @@ def to_sql(df: pd.DataFrame, *,
                 if record exists: update (possibly replacing values with NULL)
                 else: insert
         schema: Specify the schema (if database flavor supports this, i.e. postgresql). If None, use default schema.
-    
+
     """
     # 1. make connection objects
     df = df.copy()
@@ -144,17 +144,17 @@ def to_sql(df: pd.DataFrame, *,
     #
     #####################################################
     if not has_table(engine, table_name, schema=schema):
-        
+
         # log the creation of the table
         if schema is not None:
             log_info = f'Creating new table {schema}.{table_name}'
         else:
             log_info = f'Creating new table {table_name}'
-        
+
         logger.info(log_info)
 
         # create the table
-        table = Table(table_name, 
+        table = Table(table_name,
                       meta,
                       *[make_column(name, info) for name, info in df_cols_dict.items()
                         if info['dtype'] is not None],
@@ -186,9 +186,9 @@ def to_sql(df: pd.DataFrame, *,
                     _add_columns_to_db(make_column(col_name, df_col_info),
                                        table_name=table_name, con=con, schema=schema)
                     meta.clear()
-                    table = Table(table_name, 
-                                  meta, 
-                                  autoload=True, 
+                    table = Table(table_name,
+                                  meta,
+                                  autoload=True,
                                   autoload_with=engine,
                                   schema=schema)  # schema defaults to None also in the Table class
 
@@ -350,7 +350,7 @@ def _upsert(table: sqa.Table,
 def read_sql(table_name: str,
              con: str or sqa.engine,
              *,
-             lowest=None, highest=None, schema: str = None):
+             lowest=None, highest=None, schema: str = None) -> pd.DataFrame:
     """
     Read in a table from con as a pd.DataFrame, preserving dtypes and primary keys
 
@@ -368,9 +368,9 @@ def read_sql(table_name: str,
     engine = engine_builder(con)
     meta = sqa.MetaData(bind=engine)
     table = Table(table_name, 
-                  meta, 
-                  autoload=True, 
-                  autoload_with=engine, 
+                  meta,
+                  autoload=True,
+                  autoload_with=engine,
                   schema=schema)   # schema defaults to None also in the Table class
 
     if len(table.primary_key.columns) == 0:
@@ -501,7 +501,7 @@ def _add_columns_to_db(new_col, table_name, con, schema=None):
     """Make new columns as needed with ALTER TABLE, as a weak substitute for migrations"""
     engine = engine_builder(con)
     name = clean_name(new_col.name)
-    
+
     if schema is None:
         table_namespace = table_name
     else:
