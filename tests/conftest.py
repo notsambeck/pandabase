@@ -86,7 +86,7 @@ def empty_db(request):
         meta = sa.MetaData()
         meta.reflect(e)
         for table_name in meta.tables:
-            print(table_name)
+            print('dropping existing table', table_name)
             meta.tables[table_name].drop(e)
 
     return pb.engine_builder(request.param)
