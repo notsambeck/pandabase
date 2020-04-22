@@ -377,8 +377,9 @@ def read_sql(table_name: str,
         print(f'Table {table_name} has no explicit PK/index (using autoindex)')
         assert lowest is None
         assert highest is None
-        result = engine.execute(table.select())
-        data = result.fetchall()
+        with engine.begin() as con:
+            result = con.execute(table.select())
+            data = result.fetchall()
 
     elif len(table.primary_key.columns) == 1:
         pk = table.primary_key.columns.items()[0][1]
@@ -394,8 +395,9 @@ def read_sql(table_name: str,
             else:
                 s = table.select().where(and_(pk >= lowest,
                                               pk <= highest))
-        result = engine.execute(s)
-        data = result.fetchall()
+        with engine.begin() as con:
+            result = con.execute(s)
+            data = result.fetchall()
 
         if len(data) == 0:
             if not isinstance(lowest, pk.type.python_type) or not isinstance(highest, pk.type.python_type):
@@ -424,8 +426,9 @@ def read_sql(table_name: str,
                 else:
                     s = s.where(pks[i][1] <= val)
 
-        result = engine.execute(s)
-        data = result.fetchall()
+        with engine.begin() as con:
+            result = con.execute(s)
+            data = result.fetchall()
 
         if len(data) == 0:
             for i, (pk, col) in enumerate(table.primary_key.columns.items()):
