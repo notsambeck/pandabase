@@ -55,6 +55,9 @@ Code partially stolen from:
 [Dataset](https://github.com/pudo/dataset) (nice, more general-purpose SQL interaction library) and 
 [pandas.sql](https://github.com/pandas-dev/pandas/blob/master/pandas/io/sql.py)
 
+See also:
+[Pangres](https://github.com/ThibTrip/pangres) like Pandabase, but faster.
+
 ### Installation
 From your inside your virtual environment of choice:
 
@@ -105,11 +108,34 @@ new_sqlite_db.sqlite
 11  0.406995
 ```
 
-Additional keyword arguments for pandabase.read_sql:
+### Usage notes & recommendations:
 
-[lowest, highest]: minimum/maximum values for PK that will be retrieved. Can be used independently of each other.
+#### Engines vs. strings
+All methods accept either a string or sqlalchemy.Engine for argument 'con' (i.e. database connection).
+Using a string works, but the connection may not be returned to the connection pool at transaction end.
+Eventually, this may exhaust the connection pool.
+For applications, always pass an engine object to pandabase.to_sql and pandabase.read_sql. Example:
 
-For multi-index tables, use e.g. highest=(max_value_for_pk0, max_value_for_pk1, ), lowest=(min_value_for_pk0, min_value_for_pk1, )
+```python
+>>> import pandabase
+>>> engine = pandabase.engine_builder('postgresql+psycopg2://postgres:postgres@localhost:5432/testdb')
+>>> pandabase.to_sql(df=df, con=engine, table_name='table0')   # to use default schema=None => 'public'
+>>> pandabase.to_sql(df=df, con=engine, table_name='table0', schema='my_schema')   #  access my_schema.table
+```
+
+
+#### Keyword arguments for pandabase.read_sql:
+
+* [lowest, highest]: minimum/maximum values for PK that will be retrieved.
+    * Can be used independently of each other.
+    * For multi-index tables, use a tuple of values in order.
+    * e.g. `pandabase.to_sql(con=con, table_name='multi_index_table', highest=(max_value_for_pk0, max_value_for_pk1, ), lowest=(min_value_for_pk0, min_value_for_pk1, )`
+* schema: string, schema for Postgres
+    * e.g. for `pandabase.to_sql(con=con, table_name='bare_table', schema='my_schema')   # myschema.bare_table`
+* add_new_columns: bool, default False. if True, add columns to database as necessary to match incoming DataFrame
+    * e.g. for `pandabase.to_sql(con=con, table_name='table0', add_new_columns=True)`
+* how: ['create_only', 'append', or 'upsert']
+
 
 Minor bug: note that selecting an empty subset of data will raise an error if type(lowest) != type(data), even if the types are comparible (e.g. float vs. int)
 

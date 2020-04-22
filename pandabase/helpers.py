@@ -71,6 +71,9 @@ def engine_builder(con):
     """
     Returns a SQLAlchemy engine from a URI (if con is a string)
     if con is already a connection, return con without modifying it.
+
+    Note that an application should create its own engine and pass it; otherwise engine objects may proliferate
+    and eventually cause trouble.
     """
     if isinstance(con, str):
         if con[:8].lower() == 'postgres':
