@@ -6,9 +6,9 @@
 
 pandabase links pandas DataFrames to SQL databases, supporting read, append, upsert, and basic database management operations. 
 
-By default, uses DataFrame.index as the primary key. By using an explicit primary key, pandabase makes rational database schemas the obvious choice, and makes it easy to maintain clean data even when it must be updated frequently. 
+By default, pandabase uses DataFrame.index as the primary key. Using an explicit primary key makes rational database schemas the obvious choice, and makes it easy to maintain clean data even when it must be updated frequently. 
 
-Designed specifically for time-series datasets that need to be stored to disk permanently, but are updated over time and used primarily in-memory for computation. All supported types are nullable, great for flexible ML applications.
+Designed specifically for time-series datasets that need to be stored to disk permanently, but are updated over time and used primarily in-memory for computation. All supported types are nullable, ideal for ML applications.
 
 Tested under:
 * Python >= 3.6
@@ -19,8 +19,8 @@ Tested under:
     * requires psycopg2 and postgres >= 8
 
 ### Features
-* pandabase.to_sql replaces df.to_sql
-* pandabase.read_sql replaces pd.read_sql
+* pandabase.to_sql(df, ...) replaces df.to_sql(...)
+* pandabase.read_sql(...)   replaces pd.read_sql(...)
 * primary key support:
     * by default, uses df.index as table PK (must have name != None)
     * filter results with lowest/highest kwargs: lowest <= results.pk <= highest 
@@ -59,7 +59,7 @@ See also:
 [Pangres](https://github.com/ThibTrip/pangres) like Pandabase, but faster.
 
 ### Installation
-From your inside your virtual environment of choice:
+From your virtual environment of choice:
 
 ```bash
 ~/$ pip install pandabase
