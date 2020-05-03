@@ -434,9 +434,15 @@ def read_sql(table_name: str,
             for i, (pk, col) in enumerate(table.primary_key.columns.items()):
                 if isinstance(lowest[i], col.type.python_type) or isinstance(highest[i], col.type.python_type):
                     continue
+                elif lowest[i] is None and highest[i] is None:
+                    continue
+                elif isinstance(col.type.python_type, (int, float)) \
+                        and isinstance(lowest[i], (int, float)) \
+                        and isinstance(highest[i], (int, float)):
+                    continue
                 else:
-                    raise TypeError(f'Select range is: {lowest[i]} <= data <= {highest[i]}; '
-                                    f'but type of column is {col.type.python_type}')
+                    raise TypeError(f'Found no data. Select range is: {lowest[i]} <= data <= {highest[i]}; '
+                                    f'but type of column is not comparable: {col.type.python_type}')
 
     else:
         raise ValueError(f'invalid table.primary_key.columns = {table.primary_key.columns}')

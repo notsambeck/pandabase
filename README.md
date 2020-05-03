@@ -59,7 +59,7 @@ See also:
 [Pangres](https://github.com/ThibTrip/pangres) like Pandabase, but faster.
 
 ### Installation
-From your inside your virtual environment of choice:
+From your virtual environment of choice (including Conda):
 
 ```bash
 ~/$ pip install pandabase
@@ -137,7 +137,11 @@ For applications, always pass an engine object to pandabase.to_sql and pandabase
 * how: ['create_only', 'append', or 'upsert']
 
 
-Minor bug: note that selecting an empty subset of data will raise an error if type(lowest) != type(data), even if the types are comparible (e.g. float vs. int)
+Usage note up to 0.4.5 release.
+selecting an empty subset of data will raise an error if type(lowest) != type(data), 
+even if the types are comparable, e.g. float vs. int.
+
+(New behavior will return a DataFrame with length zero for  
 
 ### Using Extra Features
 Companda - rich comparisons of DataFrames. call companda on two DataFrames, get a Companda object back (that evaluates to True/False).
