@@ -255,3 +255,29 @@ def multi_index_df_4():
     df.boolean = [True, False] * (rows // 2)
 
     return df
+
+
+@pytest.fixture(scope='function')
+def multi_index_df_5():
+    """make a basic DataFrame with [string, integer, datetime, integer] MultiIndex"""
+    rows = 7
+    mi = pd.MultiIndex.from_arrays([
+        [f'thing{i}' for i in range(rows)],
+        list(range(10, rows+10)),
+        pd.date_range('2019-1-1', freq='30m', periods=rows, tz=pytz.utc),
+        list(range(rows)),
+    ],
+        names=['string_index', 'integer_index_0', 'datetime_index', 'integer_index_1'])
+    df = pd.DataFrame(columns=['date', 'integer', 'float', 'string', 'boolean'], index=mi)
+
+    df.date = pd.date_range(pd.to_datetime('2001-01-01 12:00am', utc=True), periods=rows, freq='h', tz=UTC)
+
+    df.integer = range(777, rows + 777)
+
+    df.float = [float(i) / 10 for i in range(rows)]
+    df.float = df.float.astype(np.float)
+
+    df.string = list('panda_base')[:rows]
+    df.boolean = [True, False] * (rows // 2)
+
+    return df

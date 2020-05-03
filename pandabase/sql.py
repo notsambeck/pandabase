@@ -478,6 +478,7 @@ def read_sql(table_name: str,
 
                 if is_datetime64_any_dtype(dtype):
                     indices[-1] = pd.to_datetime(indices[-1].values, utc=True)
+                    indices[-1] = pd.DatetimeIndex(indices[-1], name=col.name)
 
                 df = df.drop(columns=[col.name])
                 continue

@@ -31,8 +31,10 @@ class Companda(object):
         return self.equal
 
     def __repr__(self):
-        return f'COMPANDA({self.equal}); columns_equal={self.columns_equal}; \n' \
-               f'{self.message}'
+        if not self:
+            return f'COMPANDA({self.equal}); columns_equal={self.columns_equal}. Unequal because: {self.message}'
+        else:
+            return f'COMPANDA({self.equal})'
 
 
 def companda(df1: pd.DataFrame,
@@ -95,6 +97,14 @@ def companda(df1: pd.DataFrame,
         if df1.index.name != df2.index.name:
             return Companda(False, True,
                             f'Different index names: {df1.index.name}, {df2.index.name}')
+
+        if isinstance(df1.index, pd.MultiIndex):
+            if not isinstance(df2.index, pd.MultiIndex):
+                return Companda(False, True, 'df1 is multi-index; df2 is single index')
+            for i, name in enumerate(df1.index.names):
+                if df2.index.names[i] != name:
+                    return Companda(False, True,
+                                    f'df1.index.names[{i}]={df1.index.names[i]}, df2.index.names[{i}]={df2.index.names[i]}.')
 
         # coerce index dtype if we're not checking this
         # if not check_dtype:
