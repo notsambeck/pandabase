@@ -519,7 +519,7 @@ def _add_columns_to_db(new_col, table_name, con, schema=None):
 
     with engine.begin() as conn:
         conn.execute(f'ALTER TABLE {table_namespace} '
-                     f'ADD COLUMN {name} {new_col.type.compile(engine.dialect)}')
+                     f'ADD {name} {new_col.type.compile(engine.dialect)}')
 
 
 def profiling_script(n_rows):
