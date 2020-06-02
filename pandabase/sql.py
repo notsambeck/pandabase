@@ -278,18 +278,17 @@ def _insert(table: sqa.Table,
 
     with engine.begin() as con:
         rows = []
-        
+
         # remove completely null columns; convert to object due to bug inserting Int64
         df = cleaned_data.dropna(axis=1, how='all').astype('object')
 
         if not auto_index:
             for row in df.reset_index(drop=False).itertuples(index=False):
                 rows.append(row._asdict())
-            con.execute(table.insert(), rows)
         else:
             for row in df.reset_index(drop=True).itertuples(index=False):
                 rows.append(row._asdict())
-            con.execute(table.insert(), rows)
+        con.execute(table.insert(), rows)
 
 
 def _upsert(table: sqa.Table,
@@ -512,17 +511,14 @@ def _add_columns_to_db(new_col, table_name, con, schema=None):
     engine = engine_builder(con)
     name = clean_name(new_col.name)
 
-    if schema is None:
-        table_namespace = table_name
-    else:
-        table_namespace = f'{schema}.{table_name}'
-
+    table_namespace = table_name if schema is None else f'{schema}.{table_name}'
     with engine.begin() as conn:
         conn.execute(f'ALTER TABLE {table_namespace} '
                      f'ADD {name} {new_col.type.compile(engine.dialect)}')
 
 
 def profiling_script(n_rows):
+    """trivial script for running against timeit, etc."""
     db = 'sqlite:///:memory:'
     n_cols = 100
     _df = pd.DataFrame(index=range(n_rows), columns=['col_' + str(n) for n in range(n_cols)],

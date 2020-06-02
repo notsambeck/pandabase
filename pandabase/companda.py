@@ -121,7 +121,7 @@ def companda(df1: pd.DataFrame,
     # VALUES
     for col in df1.columns:
         # datatype checks
-        if check_dtype and not df1[col].dtype is df2[col].dtype:
+        if check_dtype and df1[col].dtype is not df2[col].dtype:
             return Companda(False, True,
                             f"columns and indices equal, but datatypes not equal in column {col}. \n"
                             f"types: {df1[col].dtype} / {df2[col].dtype}.")

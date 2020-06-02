@@ -116,17 +116,11 @@ new_sqlite_db.sqlite
 
 ### Usage notes & recommendations:
 
-#### Caveat: safe names
-pandabase.helpers.clean_name runs (silently) to clean all table and column names. 
-It replaces spaces and punctuation with underscores, and uppercase letters with lowercase.
-If your incoming data has uppercase names, they will be changed; 
-if your existing database has uppercase names, pandabase will not be able to access them.
-
 #### Engines vs. strings
 All methods accept either a string or sqlalchemy.Engine for argument 'con' (i.e. database connection).
 Using a string works, but the connection may not be returned to the connection pool at transaction end.
 Eventually, this may exhaust the connection pool.
-For applications, always pass an engine object to pandabase.to_sql and pandabase.read_sql. Example:
+For applications, **pass an engine object to pandabase.to_sql and pandabase.read_sql**. Example:
 
 ```python
 >>> import pandabase
@@ -135,6 +129,16 @@ For applications, always pass an engine object to pandabase.to_sql and pandabase
 >>> pandabase.to_sql(df=df, con=engine, table_name='table0', schema='my_schema')   #  access my_schema.table
 ```
 
+#### Caveat: safe names
+pandabase.helpers.clean_name runs (silently) to clean all table and column names. 
+It replaces spaces and punctuation with underscores, and uppercase letters with lowercase.
+If your incoming data has uppercase names, they will be changed; 
+if your existing database has uppercase names, pandabase will not be able to access them.
+
+#### Caveat: datatype parsing
+pandabase.helpers.series_is_boolean tries to determine whether a series of (nominally) ints or floats
+might actually be boolean. This helps constrain data when it is correct; however, this function is very conservative
+to avoid e.g. making a column of all zeros boolean. Set the DataFrame's dtypes to avoid this potential pitfall.
 
 #### Keyword arguments for pandabase.read_sql:
 
