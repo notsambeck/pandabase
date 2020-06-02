@@ -5,7 +5,8 @@
 [![Coverage Status](https://coveralls.io/repos/github/notsambeck/pandabase/badge.svg?branch=master)](https://coveralls.io/github/notsambeck/pandabase?branch=master)
 
 pandabase links pandas DataFrames to SQL databases, supporting read, append, upsert, and basic database management operations. 
-**If your project doesn't need a full-on ORM, it might need pandabase.**
+**If your project doesn't need a full-on ORM, it might need pandabase.
+If your project currently stores data as .csv, you definitely need pandabase.**
 
 By default, pandabase uses DataFrame.index as the primary key. 
 Using an explicit primary key makes better database schemas the obvious choice, 
