@@ -10,7 +10,6 @@ from pandas.api.types import (is_bool_dtype,
 import sqlalchemy as sqa
 from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, TIMESTAMP
 
-# fake random index name in case of not explicitly indexed data
 PANDABASE_DEFAULT_INDEX = 'pandabase_auto_generated_index'
 
 
@@ -37,7 +36,7 @@ def series_is_boolean(col: pd.Series or pd.Index):
     """
     returns:
         None if column is all None;
-        True if a pd.Series only contains True, False, and None;
+        True if a pd.Series contains True, False, and None;
         False otherwise
 
     caveat: does not interpret all-zero or all-one columns as boolean"""
@@ -52,16 +51,14 @@ def series_is_boolean(col: pd.Series or pd.Index):
         for val in col.unique():
             if val not in [True, False, None]:
                 return False
-        if not (False in col.unique() and True in col.unique()):
-            return False
-        return True
+        return False in col.unique() and True in col.unique()
     elif is_integer_dtype(col) or is_float_dtype(col):
         for val in col.unique():
             if pd.isna(val):
                 continue
             if val not in [1, 0, None]:
                 return False
-            if not (0 in col.unique() and 1 in col.unique()):
+            if 0 not in col.unique() or 1 not in col.unique():
                 return False
         return True
     return False

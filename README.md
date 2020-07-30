@@ -14,10 +14,16 @@ Pangres is a similar tool, but better written. It is generally faster. It doesn'
 ### Description
 
 pandabase links pandas DataFrames to SQL databases, supporting read, append, upsert, and basic database management operations. 
+**If your project doesn't need a full-on ORM, it might need pandabase.
+If your project currently stores data as .csv, you definitely need pandabase.**
 
-By default, pandabase uses DataFrame.index as the primary key. Using an explicit primary key makes rational database schemas the obvious choice, and makes it easy to maintain clean data even when it must be updated frequently. 
+By default, pandabase uses DataFrame.index as the primary key. 
+Using an explicit primary key makes better database schemas the obvious choice, 
+and makes it easy to maintain clean data even when data is updated frequently. 
 
-Designed specifically for time-series datasets that need to be stored to disk permanently, but are updated over time and used primarily in-memory for computation. All supported types are nullable, ideal for ML applications.
+Designed for machine learning applications, especially time-series datasets 
+that are updated over time and used in-memory for computation. 
+
 
 Tested under:
 * Python >= 3.6
@@ -51,10 +57,10 @@ Tested under:
 * companda(df1, df2) test tool: rich comparisons of DataFrames
 
 ### Design Considerations
-* Minimal dependencies: Pandas (>= 0.24) & SQLAlchemy (>= 1.3) are the only requirements
-* Database is the source of truth: will coerce incoming DataFrames to fit existing schema
-  * but also is reasonably smart about how new tables are created from DataFrames
-* Not horrendously slow (?)
+* Minimal dependencies: Pandas (>= 0.24) & SQLAlchemy (>= 1.3, core only) are the only requirements
+* Database is the source of truth: pandabase will try to coerce incoming DataFrames to fit existing schema
+  * also reasonably smart about how new tables are created from DataFrames
+* [Not horrendously slow](https://github.com/notsambeck/pandabase_profile)
 
 ### License
 MIT license
@@ -65,7 +71,7 @@ Code partially stolen from:
 [pandas.sql](https://github.com/pandas-dev/pandas/blob/master/pandas/io/sql.py)
 
 See also:
-[Pangres](https://github.com/ThibTrip/pangres) like Pandabase, but faster.
+[Pangres](https://github.com/ThibTrip/pangres) which is like pandabase, but a) faster on postgres b) less features.
 
 ### Installation
 From your virtual environment of choice (including Conda):
@@ -123,7 +129,7 @@ new_sqlite_db.sqlite
 All methods accept either a string or sqlalchemy.Engine for argument 'con' (i.e. database connection).
 Using a string works, but the connection may not be returned to the connection pool at transaction end.
 Eventually, this may exhaust the connection pool.
-For applications, always pass an engine object to pandabase.to_sql and pandabase.read_sql. Example:
+For applications, **pass an engine object to pandabase.to_sql and pandabase.read_sql**. Example:
 
 ```python
 >>> import pandabase
@@ -132,6 +138,16 @@ For applications, always pass an engine object to pandabase.to_sql and pandabase
 >>> pandabase.to_sql(df=df, con=engine, table_name='table0', schema='my_schema')   #  access my_schema.table
 ```
 
+#### Caveat: safe names
+pandabase.helpers.clean_name runs (silently) to clean all table and column names. 
+It replaces spaces and punctuation with underscores, and uppercase letters with lowercase.
+If your incoming data has uppercase names, they will be changed; 
+if your existing database has uppercase names, pandabase will not be able to access them.
+
+#### Caveat: datatype parsing
+pandabase.helpers.series_is_boolean tries to determine whether a series of (nominally) ints or floats
+might actually be boolean. This helps constrain data when it is correct; however, this function is very conservative
+to avoid e.g. making a column of all zeros boolean. Set the DataFrame's dtypes to avoid this potential pitfall.
 
 #### Keyword arguments for pandabase.read_sql:
 
@@ -175,7 +191,7 @@ False
 
 ### Table utility functions:
 
-Under basic use cases, Pandabase can handle database administration tasks. All support schema=name kwarg in Postgres.
+Under basic use cases, Pandabase can handle simple database administration tasks. All support schema=name kwarg in Postgres.
 
 * drop_db_table(table_name, con):
     * Drop table [table_name] from con - be careful with this!
