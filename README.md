@@ -1,8 +1,17 @@
 ![pandabase_logo](https://github.com/notsambeck/notsambeck.github.io/blob/master/media/pandabase_logo.jpg?raw=true)
 
 ##### pip install pandabase
+
 [![Build Status](https://travis-ci.org/notsambeck/pandabase.svg?branch=master)](https://travis-ci.org/notsambeck/pandabase)
 [![Coverage Status](https://coveralls.io/repos/github/notsambeck/pandabase/badge.svg?branch=master)](https://coveralls.io/github/notsambeck/pandabase?branch=master)
+
+### DEPRECATION WARNING:
+
+### pandabase is OK, but you should probably look at [Pangres](https://github.com/ThibTrip/pangres) instead
+
+Pangres is a similar tool, but better written. It is generally faster. It doesn't have as many database management features, but they would be pretty easy to add...
+
+### Description
 
 pandabase links pandas DataFrames to SQL databases, supporting read, append, upsert, and basic database management operations. 
 
